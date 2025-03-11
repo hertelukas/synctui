@@ -1230,6 +1230,8 @@ dependencies = [
  "clap",
  "color-eyre",
  "reqwest",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

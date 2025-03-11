@@ -17,5 +17,6 @@ async fn main() -> eyre::Result<()> {
     let args = Args::parse();
     let client = Client::new(&args.api_key)?;
     client.ping().await?;
+    client.get_config().await?;
     Ok(())
 }

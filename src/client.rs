@@ -1,6 +1,8 @@
 use color_eyre::eyre;
 use reqwest::header;
 
+use crate::Configuration;
+
 const ADDR: &str = "http://localhost:8384/rest";
 
 #[derive(Debug)]
@@ -28,5 +30,16 @@ impl Client {
             .await?
             .error_for_status()?;
         Ok(())
+    }
+
+    pub async fn get_config(&self) -> eyre::Result<Configuration> {
+        Ok(self
+            .client
+            .get(format!("{}/config", ADDR))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
     }
 }
