@@ -1,7 +1,8 @@
 use color_eyre::eyre;
 use reqwest::header;
+use tokio::sync::mpsc::Sender;
 
-use crate::Configuration;
+use crate::{Configuration, Event};
 
 const ADDR: &str = "http://localhost:8384/rest";
 
@@ -41,5 +42,24 @@ impl Client {
             .error_for_status()?
             .json()
             .await?)
+    }
+
+    pub async fn get_events(&self, tx: Sender<Event>) -> eyre::Result<()> {
+        let mut current_id = 0;
+        loop {
+            let events: Vec<Event> = self
+                .client
+                .get(format!("{}/events?since={}", ADDR, current_id))
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await?;
+
+            for event in events {
+                current_id = event.id;
+                tx.send(event).await?;
+            }
+        }
     }
 }

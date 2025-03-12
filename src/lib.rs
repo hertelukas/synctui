@@ -3,3 +3,4 @@ pub use client::Client;
 
 mod ty;
 pub use ty::Configuration;
+pub use ty::Event;

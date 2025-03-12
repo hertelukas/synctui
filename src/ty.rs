@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -31,4 +32,51 @@ pub struct Device {
     #[serde(rename = "deviceID")]
     device_id: String,
     name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct Event {
+    pub id: u64,
+    #[serde(rename = "globalID")]
+    global_id: u64,
+    time: chrono::DateTime<Utc>,
+    #[serde(rename = "type")]
+    ty: EventType,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+enum EventType {
+    ClusterConfigReceived,
+    ConfigSaved,
+    DeviceConnected,
+    DeviceDisconnected,
+    DeviceDiscovered,
+    DevicePause,
+    DeviceRejected, // Deprecated
+    DeviceResumed,
+    DownloadProgress,
+    Failure,
+    FolderCompletion,
+    FolderErrors,
+    FolderPaused,
+    FolderRejected, // Deprecated
+    FolderResumed,
+    FolderScanProgress,
+    FolderSummary,
+    FolderWatchStateChanged,
+    ItemFinished,
+    ItemStarted,
+    ListenAddressesChanged,
+    LocalChangeDetected,
+    LocalIndexUpdated,
+    LoginAttempt,
+    PendingDevicesChanged,
+    PendingFoldersChanged,
+    RemoteChangeDetected,
+    RemoteDownloadProgress,
+    RemoteIndexUpdated,
+    Starting,
+    StartupComplete,
+    StateChanged,
 }
