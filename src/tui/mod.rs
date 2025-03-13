@@ -13,20 +13,19 @@ use ratatui::{
     prelude::{Backend, CrosstermBackend},
 };
 
+use crate::Client;
+
 mod app;
 mod ui;
 
-#[tokio::main]
-async fn main() -> eyre::Result<()> {
-    color_eyre::install()?;
-
+pub async fn start(client: Client) -> eyre::Result<()> {
     init_panic_hook();
 
     // Setup terminal
     let mut terminal = init_tui()?;
     terminal.clear()?;
 
-    let mut app = App::default();
+    let mut app = App::new(client);
     let _ = run(&mut terminal, &mut app).await;
 
     //restore terminal

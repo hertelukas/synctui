@@ -6,7 +6,7 @@ use ratatui::{
 };
 use strum::IntoEnumIterator;
 
-use crate::app::{App, CurrentScreen};
+use super::app::{App, CurrentScreen};
 
 pub fn ui(frame: &mut Frame, app: &App) {
     frame.render_widget(create_background(app), frame.area());
