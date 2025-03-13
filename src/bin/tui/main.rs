@@ -1,12 +1,12 @@
 use std::io;
 use ui::ui;
 
-use app::App;
+use app::{App, CurrentScreen};
 use color_eyre::eyre;
 use ratatui::{
     Terminal,
     crossterm::{
-        event::{DisableMouseCapture, EnableMouseCapture},
+        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
         execute,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
@@ -62,5 +62,25 @@ fn restore_tui() -> io::Result<()> {
 async fn run<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), std::io::Error> {
     loop {
         terminal.draw(|f| ui(f, app))?;
+
+        if let Event::Key(key) = event::read()? {
+            // Ignore releases
+            if key.kind == event::KeyEventKind::Release {
+                continue;
+            }
+
+            match key.code {
+                KeyCode::Char('q') => {
+                    return Ok(());
+                }
+                KeyCode::Char('1') => {
+                    app.set_screen(CurrentScreen::Folders);
+                }
+                KeyCode::Char('2') => {
+                    app.set_screen(CurrentScreen::Devices);
+                }
+                _ => {}
+            }
+        }
     }
 }
