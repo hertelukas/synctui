@@ -1,12 +1,12 @@
 use std::io;
 use ui::ui;
 
-use app::{App, CurrentScreen};
+use app::App;
 use color_eyre::eyre;
 use ratatui::{
     Terminal,
     crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+        event::{self, DisableMouseCapture, EnableMouseCapture, Event},
         execute,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
@@ -16,6 +16,7 @@ use ratatui::{
 use crate::Client;
 
 mod app;
+mod input;
 mod ui;
 
 pub async fn start(client: Client) -> eyre::Result<()> {
@@ -59,7 +60,7 @@ fn restore_tui() -> io::Result<()> {
 }
 
 async fn run<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), std::io::Error> {
-    loop {
+    while app.running {
         terminal.draw(|f| ui(f, app))?;
 
         if let Event::Key(key) = event::read()? {
@@ -68,18 +69,11 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()
                 continue;
             }
 
-            match key.code {
-                KeyCode::Char('q') => {
-                    return Ok(());
-                }
-                KeyCode::Char('1') => {
-                    app.set_screen(CurrentScreen::Folders);
-                }
-                KeyCode::Char('2') => {
-                    app.set_screen(CurrentScreen::Devices);
-                }
-                _ => {}
+            let mut msg = Some(input::handler(key));
+            while let Some(m) = msg {
+                msg = app.update(m);
             }
         }
     }
+    Ok(())
 }
