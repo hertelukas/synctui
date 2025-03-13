@@ -16,6 +16,7 @@ struct Args {
     cli: bool,
 
     /// Provide custom config path
+    #[arg(short, long)]
     config: Option<String>,
 }
 
@@ -26,7 +27,7 @@ async fn main() -> eyre::Result<()> {
     let api_key = {
         match args.api_key {
             Some(key) => key,
-            None => AppConfig::load()?.api_key,
+            None => AppConfig::load(args.config)?.api_key,
         }
     };
     let client = Client::new(&api_key)?;

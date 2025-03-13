@@ -1,4 +1,4 @@
-use std::fs::read_to_string;
+use std::{fs::read_to_string, path::PathBuf};
 
 use color_eyre::eyre;
 use serde::{Deserialize, Serialize};
@@ -12,11 +12,17 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    pub fn load() -> eyre::Result<Self> {
-        let path = dirs::config_dir()
-            .ok_or(AppError::NoConfig)?
-            .join("synctui")
-            .join("config.toml");
+    pub fn load<T>(path: Option<T>) -> eyre::Result<Self>
+    where
+        T: Into<PathBuf>,
+    {
+        let path: PathBuf = match path {
+            Some(path) => path.into(),
+            None => dirs::config_dir()
+                .ok_or(AppError::NoConfig)?
+                .join("synctui")
+                .join("config.toml"),
+        };
 
         let config = read_to_string(path)?;
 
