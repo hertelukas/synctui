@@ -2,7 +2,7 @@ use color_eyre::eyre;
 use reqwest::header;
 use tokio::sync::mpsc::Sender;
 
-use crate::{Configuration, Event};
+use crate::{AppError, Configuration, Event};
 
 const ADDR: &str = "http://localhost:8384/rest";
 
@@ -33,7 +33,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn get_configuration(&self) -> eyre::Result<Configuration> {
+    pub async fn get_configuration(&self) -> eyre::Result<Configuration, AppError> {
         Ok(self
             .client
             .get(format!("{}/config", ADDR))

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::Client;
+use crate::{AppError, Client};
 
 use super::input::Message;
 
@@ -37,7 +37,9 @@ pub struct App {
     pub running: bool,
     pub current_screen: CurrentScreen,
     pub folders: Arc<Mutex<Vec<state::Folder>>>,
-    selected_folder: usize,
+    selected_folder: Option<usize>,
+    highlighted_folder: usize,
+    pub error: Arc<Mutex<Option<AppError>>>,
 }
 
 impl App {
@@ -48,7 +50,9 @@ impl App {
             running: true,
             current_screen: CurrentScreen::default(),
             folders: Arc::new(Mutex::new(vec![])),
-            selected_folder: 0,
+            selected_folder: None,
+            highlighted_folder: 0,
+            error: Arc::new(Mutex::new(None)),
         };
         app.load_folders();
         app
@@ -57,25 +61,30 @@ impl App {
     fn load_folders(&self) {
         let reload_tx = self.reload_tx.clone();
         let folders_handle = self.folders.clone();
+        let error_handle = self.error.clone();
         let client = self.client.clone();
         tokio::spawn(async move {
             let config = client.get_configuration().await;
-            if let Ok(conf) = config {
-                *folders_handle.lock().unwrap() = conf.into();
-                reload_tx.send(()).unwrap();
+            match config {
+                Ok(conf) => {
+                    *folders_handle.lock().unwrap() = conf.into();
+                }
+                Err(e) => *error_handle.lock().unwrap() = Some(e),
             }
+
+            reload_tx.send(()).unwrap();
         });
     }
 
     fn update_folders(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Down => {
-                self.selected_folder =
-                    (self.selected_folder + 1) % self.folders.lock().unwrap().len()
+                self.highlighted_folder =
+                    (self.highlighted_folder + 1) % self.folders.lock().unwrap().len()
             }
             Message::Up => {
                 let len = self.folders.lock().unwrap().len();
-                self.selected_folder = (self.selected_folder + len - 1) % len
+                self.highlighted_folder = (self.highlighted_folder + len - 1) % len
             }
             Message::Reload => {
                 self.load_folders();
