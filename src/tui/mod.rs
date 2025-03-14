@@ -1,7 +1,7 @@
 use input::EventHandler;
 use log::debug;
 use std::io;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 use ui::ui;
 
 use app::App;
@@ -29,8 +29,10 @@ pub async fn start(client: Client) -> eyre::Result<()> {
     let mut terminal = init_tui()?;
     terminal.clear()?;
 
-    let mut app = App::new(client);
-    let _ = run(&mut terminal, &mut app).await;
+    let (reload_tx, reload_rx) = mpsc::unbounded_channel();
+
+    let mut app = App::new(client, reload_tx);
+    let _ = run(&mut terminal, &mut app, reload_rx).await;
 
     //restore terminal
     restore_tui()?;
@@ -62,7 +64,11 @@ fn restore_tui() -> io::Result<()> {
     Ok(())
 }
 
-async fn run<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), std::io::Error> {
+async fn run<B: Backend>(
+    terminal: &mut Terminal<B>,
+    app: &mut App,
+    mut reload_rx: UnboundedReceiver<()>,
+) -> Result<(), std::io::Error> {
     let (msg_tx, mut msg_rx) = mpsc::unbounded_channel();
 
     tokio::spawn(async move {
@@ -79,18 +85,13 @@ async fn run<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<()
         debug!("drawing new frame");
         terminal.draw(|f| ui(f, app))?;
 
-        // tokio::select! {
-        //         Some(msg) = msg_rx.recv() =>  {
-        //             let mut msg = Some(msg);
-        //             while let Some(m) = msg {
-        //                 msg = app.update(m);
-        //             }
-        //         },
-
-        // }
-        let mut msg = msg_rx.recv().await;
-        while let Some(m) = msg {
-            msg = app.update(m);
+        tokio::select! {
+            mut msg = msg_rx.recv() =>  {
+                while let Some(m) = msg {
+                    msg = app.update(m);
+                }
+            },
+            _ = reload_rx.recv() => {}
         }
     }
     Ok(())

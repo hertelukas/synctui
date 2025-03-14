@@ -11,9 +11,6 @@ use super::app::{App, CurrentScreen};
 pub fn ui(frame: &mut Frame, app: &App) {
     frame.render_widget(create_background(app), frame.area());
     match app.current_screen {
-        CurrentScreen::Folders => {
-            frame.render_widget(folders_block(app), frame.area());
-        }
         _ => {}
     };
 }

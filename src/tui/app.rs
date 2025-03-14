@@ -1,4 +1,5 @@
 use strum::IntoEnumIterator;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::Client;
 
@@ -30,14 +31,16 @@ impl TryFrom<u32> for CurrentScreen {
 #[derive(Debug)]
 pub struct App {
     pub client: Client,
+    reload_tx: UnboundedSender<()>,
     pub running: bool,
     pub current_screen: CurrentScreen,
 }
 
 impl App {
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: Client, reload_tx: UnboundedSender<()>) -> Self {
         App {
             client,
+            reload_tx,
             running: true,
             current_screen: CurrentScreen::default(),
         }
