@@ -1,3 +1,5 @@
+use std::sync::{Arc, Mutex};
+
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -34,19 +36,52 @@ pub struct App {
     reload_tx: UnboundedSender<()>,
     pub running: bool,
     pub current_screen: CurrentScreen,
+    pub folders: Arc<Mutex<Vec<state::Folder>>>,
+    selected_folder: usize,
 }
 
 impl App {
     pub fn new(client: Client, reload_tx: UnboundedSender<()>) -> Self {
-        App {
+        let app = App {
             client,
             reload_tx,
             running: true,
             current_screen: CurrentScreen::default(),
-        }
+            folders: Arc::new(Mutex::new(vec![])),
+            selected_folder: 0,
+        };
+        app.load_folders();
+        app
+    }
+
+    fn load_folders(&self) {
+        let reload_tx = self.reload_tx.clone();
+        let folders_handle = self.folders.clone();
+        let client = self.client.clone();
+        tokio::spawn(async move {
+            let config = client.get_configuration().await;
+            if let Ok(conf) = config {
+                *folders_handle.lock().unwrap() = conf.into();
+                reload_tx.send(()).unwrap();
+            }
+        });
     }
 
     fn update_folders(&mut self, msg: Message) -> Option<Message> {
+        match msg {
+            Message::Down => {
+                self.selected_folder =
+                    (self.selected_folder + 1) % self.folders.lock().unwrap().len()
+            }
+            Message::Up => {
+                let len = self.folders.lock().unwrap().len();
+                self.selected_folder = (self.selected_folder + len - 1) % len
+            }
+            Message::Reload => {
+                self.load_folders();
+            }
+            _ => {}
+        };
         None
     }
 
@@ -71,5 +106,44 @@ impl App {
             CurrentScreen::Folders => self.update_folders(msg),
             _ => None,
         }
+    }
+}
+
+mod state {
+    use crate::Configuration;
+
+    #[derive(Debug, PartialEq)]
+    pub struct Folder {
+        id: String,
+        pub label: String,
+        path: String, // or PathBuf?
+        devices: Vec<Device>,
+    }
+
+    impl From<crate::ty::Folder> for Folder {
+        fn from(folder: crate::ty::Folder) -> Self {
+            Self {
+                id: folder.id,
+                label: folder.label,
+                path: folder.path,
+                devices: vec![], // TODO
+            }
+        }
+    }
+
+    impl From<Configuration> for Vec<Folder> {
+        fn from(conf: Configuration) -> Self {
+            let mut res = vec![];
+            for folder in conf.folders {
+                res.push(folder.into());
+            }
+            res
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    pub struct Device {
+        id: String,
+        name: String,
     }
 }

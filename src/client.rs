@@ -6,7 +6,7 @@ use crate::{Configuration, Event};
 
 const ADDR: &str = "http://localhost:8384/rest";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Client {
     client: reqwest::Client,
 }

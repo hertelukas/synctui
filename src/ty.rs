@@ -10,9 +10,9 @@ pub struct Configuration {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Folder {
-    id: String,
+    pub id: String,
     pub label: String,
-    path: String,
+    pub path: String,
     devices: Vec<FolderDevice>,
 }
 

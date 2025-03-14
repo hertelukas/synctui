@@ -16,11 +16,13 @@ pub enum Message {
     Left,
     // General
     Quit,
+    Reload,
     None,
 }
 
 pub fn handler(key_event: KeyEvent) -> Message {
     match key_event.code {
+        KeyCode::Char('r') => Message::Reload,
         KeyCode::Char('q') => Message::Quit,
         KeyCode::Char('j') | KeyCode::Down => Message::Down,
         KeyCode::Char('k') | KeyCode::Up => Message::Up,

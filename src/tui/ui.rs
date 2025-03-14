@@ -9,23 +9,26 @@ use strum::IntoEnumIterator;
 use super::app::{App, CurrentScreen};
 
 pub fn ui(frame: &mut Frame, app: &App) {
-    frame.render_widget(create_background(app), frame.area());
-    match app.current_screen {
-        _ => {}
+    let background = create_background(app);
+    let inner_area = background.inner(frame.area());
+    let inner = match app.current_screen {
+        CurrentScreen::Folders => folders_block(app),
+        _ => unimplemented!(),
     };
+
+    frame.render_widget(background, frame.area());
+    frame.render_widget(inner, inner_area);
 }
 
 fn folders_block(app: &App) -> impl Widget {
     let mut list_items = Vec::<ListItem>::new();
 
-    //if let Ok(configuration) = app.client.get_configuration().await {
-    //     for folder in configuration.folders {
-    //         list_items.push(ListItem::new(Line::from(Span::raw(folder.label))));
-    //     }
-    // }
+    for folder in &*app.folders.lock().unwrap() {
+        list_items.push(ListItem::new(Line::from(Span::raw(folder.label.clone()))));
+    }
 
     let list = List::new(list_items);
-    list.block(Block::bordered().borders(Borders::ALL))
+    list
 }
 
 fn create_background(app: &App) -> Block {
