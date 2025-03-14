@@ -1,4 +1,7 @@
+use input::EventHandler;
+use log::debug;
 use std::io;
+use tokio::sync::mpsc;
 use ui::ui;
 
 use app::App;
@@ -6,7 +9,7 @@ use color_eyre::eyre;
 use ratatui::{
     Terminal,
     crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event},
+        event::{DisableMouseCapture, EnableMouseCapture},
         execute,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
@@ -60,19 +63,34 @@ fn restore_tui() -> io::Result<()> {
 }
 
 async fn run<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> Result<(), std::io::Error> {
+    let (msg_tx, mut msg_rx) = mpsc::unbounded_channel();
+
+    tokio::spawn(async move {
+        let mut event = EventHandler::new();
+        loop {
+            let event = event.next().await;
+            if let Some(input::Event::Key(k)) = event {
+                msg_tx.send(input::handler(k)).unwrap()
+            };
+        }
+    });
+
     while app.running {
+        debug!("drawing new frame");
         terminal.draw(|f| ui(f, app))?;
 
-        if let Event::Key(key) = event::read()? {
-            // Ignore releases
-            if key.kind == event::KeyEventKind::Release {
-                continue;
-            }
+        // tokio::select! {
+        //         Some(msg) = msg_rx.recv() =>  {
+        //             let mut msg = Some(msg);
+        //             while let Some(m) = msg {
+        //                 msg = app.update(m);
+        //             }
+        //         },
 
-            let mut msg = Some(input::handler(key));
-            while let Some(m) = msg {
-                msg = app.update(m);
-            }
+        // }
+        let mut msg = msg_rx.recv().await;
+        while let Some(m) = msg {
+            msg = app.update(m);
         }
     }
     Ok(())

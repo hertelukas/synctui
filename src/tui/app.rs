@@ -29,7 +29,7 @@ impl TryFrom<u32> for CurrentScreen {
 /// Tracks current state of application
 #[derive(Debug)]
 pub struct App {
-    client: Client,
+    pub client: Client,
     pub running: bool,
     pub current_screen: CurrentScreen,
 }
@@ -43,17 +43,30 @@ impl App {
         }
     }
 
+    fn update_folders(&mut self, msg: Message) -> Option<Message> {
+        None
+    }
+
     pub fn update(&mut self, msg: Message) -> Option<Message> {
+        // First, handle global messages
         match msg {
-            Message::Quit => self.running = false,
+            Message::Quit => {
+                self.running = false;
+                return None;
+            }
             Message::Number(i) => {
                 if let Ok(screen) = CurrentScreen::try_from(i) {
                     self.current_screen = screen;
+                    return None;
                 }
             }
 
             _ => {}
         }
-        None
+
+        match self.current_screen {
+            CurrentScreen::Folders => self.update_folders(msg),
+            _ => None,
+        }
     }
 }

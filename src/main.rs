@@ -1,5 +1,6 @@
 use clap::Parser;
 use color_eyre::eyre;
+use std::io::Write;
 use synctui::{AppConfig, Client, start};
 use tokio::{sync::mpsc, task};
 
@@ -20,9 +21,30 @@ struct Args {
     config: Option<String>,
 }
 
+fn setup_logging() {
+    let target = Box::new(std::fs::File::create("log.txt").expect("Can't create file"));
+
+    env_logger::Builder::new()
+        .target(env_logger::Target::Pipe(target))
+        .filter(None, log::LevelFilter::Debug)
+        .format(|buf, record| {
+            writeln!(
+                buf,
+                "[{} {} {}:{}] {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
+                record.level(),
+                record.file().unwrap_or("unknown"),
+                record.line().unwrap_or(0),
+                record.args()
+            )
+        })
+        .init();
+}
+
 #[tokio::main]
 async fn main() -> eyre::Result<()> {
     color_eyre::install()?;
+    setup_logging();
     let args = Args::parse();
     let api_key = {
         match args.api_key {
@@ -34,7 +56,7 @@ async fn main() -> eyre::Result<()> {
 
     if args.cli {
         client.ping().await?;
-        client.get_config().await?;
+        client.get_configuration().await?;
 
         let (tx_event, mut rx_event) = mpsc::channel(1);
 

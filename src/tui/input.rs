@@ -1,4 +1,9 @@
-use ratatui::crossterm::event::{KeyCode, KeyEvent};
+use futures::StreamExt;
+use log::debug;
+use ratatui::crossterm::{
+    self,
+    event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind},
+};
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
@@ -29,5 +34,43 @@ pub fn handler(key_event: KeyEvent) -> Message {
             }
         }
         _ => Message::None,
+    }
+}
+
+#[derive(Debug)]
+pub enum Event {
+    Key(crossterm::event::KeyEvent),
+}
+
+pub struct EventHandler {
+    rx: tokio::sync::mpsc::UnboundedReceiver<Event>,
+}
+
+impl EventHandler {
+    pub fn new() -> Self {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let _tx = tx.clone();
+        tokio::spawn(async move {
+            let mut reader = crossterm::event::EventStream::new();
+            loop {
+                let event = reader.next().await;
+                if let Some(Ok(event)) = event {
+                    match event {
+                        CrosstermEvent::Key(key) => {
+                            if key.kind == KeyEventKind::Press {
+                                debug!("Got key {key:?} - sending");
+                                tx.send(Event::Key(key)).unwrap();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        });
+        EventHandler { rx }
+    }
+
+    pub async fn next(&mut self) -> Option<Event> {
+        self.rx.recv().await
     }
 }

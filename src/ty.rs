@@ -4,14 +4,14 @@ use serde::Serialize;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Configuration {
-    folders: Vec<Folder>,
-    devices: Vec<Device>,
+    pub folders: Vec<Folder>,
+    pub devices: Vec<Device>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Folder {
     id: String,
-    label: String,
+    pub label: String,
     path: String,
     devices: Vec<FolderDevice>,
 }

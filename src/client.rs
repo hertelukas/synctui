@@ -33,7 +33,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn get_config(&self) -> eyre::Result<Configuration> {
+    pub async fn get_configuration(&self) -> eyre::Result<Configuration> {
         Ok(self
             .client
             .get(format!("{}/config", ADDR))
