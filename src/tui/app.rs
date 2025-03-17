@@ -37,8 +37,8 @@ pub struct App {
     pub running: bool,
     pub current_screen: CurrentScreen,
     pub folders: Arc<Mutex<Vec<state::Folder>>>,
-    selected_folder: Option<usize>,
-    highlighted_folder: usize,
+    pub selected_folder: Option<usize>,
+    pub highlighted_folder: Option<usize>,
     pub error: Arc<Mutex<Option<AppError>>>,
 }
 
@@ -51,7 +51,7 @@ impl App {
             current_screen: CurrentScreen::default(),
             folders: Arc::new(Mutex::new(vec![])),
             selected_folder: None,
-            highlighted_folder: 0,
+            highlighted_folder: None,
             error: Arc::new(Mutex::new(None)),
         };
         app.load_folders();
@@ -79,12 +79,20 @@ impl App {
     fn update_folders(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Down => {
-                self.highlighted_folder =
-                    (self.highlighted_folder + 1) % self.folders.lock().unwrap().len()
+                if let Some(highlighted_folder) = self.highlighted_folder {
+                    self.highlighted_folder =
+                        Some((highlighted_folder + 1) % self.folders.lock().unwrap().len())
+                } else {
+                    self.highlighted_folder = Some(0);
+                }
             }
             Message::Up => {
                 let len = self.folders.lock().unwrap().len();
-                self.highlighted_folder = (self.highlighted_folder + len - 1) % len
+                if let Some(highlighted_folder) = self.highlighted_folder {
+                    self.highlighted_folder = Some((highlighted_folder + len - 1) % len)
+                } else {
+                    self.highlighted_folder = Some(len - 1);
+                }
             }
             Message::Reload => {
                 self.load_folders();

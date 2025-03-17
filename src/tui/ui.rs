@@ -1,7 +1,7 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, Paragraph, Widget, Wrap},
 };
@@ -41,8 +41,19 @@ pub fn ui(frame: &mut Frame, app: &App) {
 fn folders_block(app: &App) -> impl Widget {
     let mut list_items = Vec::<ListItem>::new();
 
-    for folder in &*app.folders.lock().unwrap() {
-        list_items.push(ListItem::new(Line::from(Span::raw(folder.label.clone()))));
+    for (i, folder) in (&*app.folders.lock().unwrap()).iter().enumerate() {
+        list_items.push(ListItem::new(
+            Line::from(Span::raw(folder.label.clone())).bg(app.highlighted_folder.map_or(
+                Color::default(),
+                |highlighted_folder| {
+                    if highlighted_folder == i {
+                        Color::DarkGray
+                    } else {
+                        Color::default()
+                    }
+                },
+            )),
+        ));
     }
 
     let list = List::new(list_items);
