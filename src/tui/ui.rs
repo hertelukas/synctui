@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Widget, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
 use strum::IntoEnumIterator;
 
@@ -29,16 +29,20 @@ pub fn ui(frame: &mut Frame, app: &App) {
 
     let background = create_background(app);
     let inner_area = background.inner(frame.area());
-    let inner = match app.current_screen {
-        CurrentScreen::Folders => folders_block(app),
+    match app.current_screen {
+        CurrentScreen::Folders => folders_block(frame, app, inner_area),
         _ => unimplemented!(),
     };
 
     frame.render_widget(background, frame.area());
-    frame.render_widget(inner, inner_area);
 }
 
-fn folders_block(app: &App) -> impl Widget {
+/// Renders the folders page
+fn folders_block(frame: &mut Frame, app: &App, area: Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
     let mut list_items = Vec::<ListItem>::new();
 
     for (i, folder) in (&*app.folders.lock().unwrap()).iter().enumerate() {
@@ -57,7 +61,17 @@ fn folders_block(app: &App) -> impl Widget {
     }
 
     let list = List::new(list_items);
-    list
+
+    frame.render_widget(list, chunks[0]);
+
+    if let Some(folder_index) = app.selected_folder {
+        if let Some(folder) = app.folders.lock().unwrap().get(folder_index) {
+            let block = Block::default()
+                .title_top(Line::from(format!("| {} |", folder.label)).centered())
+                .borders(Borders::ALL);
+            frame.render_widget(block, chunks[1]);
+        }
+    }
 }
 
 fn create_background(app: &App) -> Block {

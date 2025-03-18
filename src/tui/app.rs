@@ -97,6 +97,9 @@ impl App {
             Message::Reload => {
                 self.load_folders();
             }
+            Message::Select => {
+                self.selected_folder = self.highlighted_folder;
+            }
             _ => {}
         };
         None

@@ -17,6 +17,7 @@ pub enum Message {
     // General
     Quit,
     Reload,
+    Select,
     None,
 }
 
@@ -28,6 +29,7 @@ pub fn handler(key_event: KeyEvent) -> Message {
         KeyCode::Char('k') | KeyCode::Up => Message::Up,
         KeyCode::Char('l') | KeyCode::Right => Message::Right,
         KeyCode::Char('h') | KeyCode::Left => Message::Left,
+        KeyCode::Enter => Message::Select,
         KeyCode::Char(a) => {
             if let Some(a) = a.to_digit(10) {
                 Message::Number(a)
