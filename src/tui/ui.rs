@@ -94,9 +94,9 @@ fn create_background(app: &App) -> Block {
         .collect::<Vec<Span>>();
     bottom_string.push("|".into());
 
-    block
-        .title_bottom(bottom_string)
-        .title_bottom(Line::from("| (q) quit |").right_aligned())
+    block.title_bottom(bottom_string).title_bottom(
+        Line::from(format!("| (q) quit | {} |", app.mode.lock().unwrap())).right_aligned(),
+    )
 }
 
 fn create_popup_block(_: &App, title: String) -> Block {

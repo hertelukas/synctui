@@ -14,6 +14,22 @@ pub enum CurrentScreen {
     Devices,
 }
 
+/// VIM modes
+#[derive(Debug, Clone, PartialEq)]
+pub enum CurrentMode {
+    Insert,
+    Normal,
+}
+
+impl std::fmt::Display for CurrentMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Insert => write!(f, "I"),
+            Self::Normal => write!(f, "N"),
+        }
+    }
+}
+
 impl TryFrom<u32> for CurrentScreen {
     type Error = ();
 
@@ -39,6 +55,7 @@ pub struct App {
     pub folders: Arc<Mutex<Vec<state::Folder>>>,
     pub selected_folder: Option<usize>,
     pub error: Arc<Mutex<Option<AppError>>>,
+    pub mode: Arc<Mutex<CurrentMode>>,
 }
 
 impl App {
@@ -51,6 +68,7 @@ impl App {
             folders: Arc::new(Mutex::new(vec![])),
             selected_folder: None,
             error: Arc::new(Mutex::new(None)),
+            mode: Arc::new(Mutex::new(CurrentMode::Normal)),
         };
         app.load_folders();
         app
@@ -95,8 +113,7 @@ impl App {
             Message::Reload => {
                 self.load_folders();
             }
-            Message::Select => {
-            }
+            Message::Select => {}
             _ => {}
         };
         None
@@ -115,7 +132,12 @@ impl App {
                     return None;
                 }
             }
-
+            Message::Insert => {
+                *self.mode.lock().unwrap() = CurrentMode::Insert;
+            }
+            Message::Normal => {
+                *self.mode.lock().unwrap() = CurrentMode::Normal;
+            }
             _ => {}
         }
 

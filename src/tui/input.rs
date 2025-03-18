@@ -5,8 +5,15 @@ use ratatui::crossterm::{
     event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind},
 };
 
+use super::app::CurrentMode;
+
 #[derive(Debug, PartialEq)]
 pub enum Message {
+    // Vim
+    Insert,
+    Normal,
+    // Character
+    Character(char),
     // Navigation
     Number(u32),
     // Movement
@@ -21,23 +28,32 @@ pub enum Message {
     None,
 }
 
-pub fn handler(key_event: KeyEvent) -> Message {
-    match key_event.code {
-        KeyCode::Char('r') => Message::Reload,
-        KeyCode::Char('q') => Message::Quit,
-        KeyCode::Char('j') | KeyCode::Down => Message::Down,
-        KeyCode::Char('k') | KeyCode::Up => Message::Up,
-        KeyCode::Char('l') | KeyCode::Right => Message::Right,
-        KeyCode::Char('h') | KeyCode::Left => Message::Left,
-        KeyCode::Enter => Message::Select,
-        KeyCode::Char(a) => {
-            if let Some(a) = a.to_digit(10) {
-                Message::Number(a)
-            } else {
-                Message::None
+pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
+    if mode == CurrentMode::Normal {
+        match key_event.code {
+            KeyCode::Char('r') => Message::Reload,
+            KeyCode::Char('q') => Message::Quit,
+            KeyCode::Char('j') | KeyCode::Down => Message::Down,
+            KeyCode::Char('k') | KeyCode::Up => Message::Up,
+            KeyCode::Char('l') | KeyCode::Right => Message::Right,
+            KeyCode::Char('h') | KeyCode::Left => Message::Left,
+            KeyCode::Char('i') => Message::Insert,
+            KeyCode::Enter => Message::Select,
+            KeyCode::Char(a) => {
+                if let Some(a) = a.to_digit(10) {
+                    Message::Number(a)
+                } else {
+                    Message::None
+                }
             }
+            _ => Message::None,
         }
-        _ => Message::None,
+    } else {
+        match key_event.code {
+            KeyCode::Char(a) => Message::Character(a),
+            KeyCode::Esc => Message::Normal,
+            _ => Message::None,
+        }
     }
 }
 

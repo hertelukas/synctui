@@ -4,7 +4,7 @@ use std::io;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use ui::ui;
 
-use app::App;
+use app::{App, CurrentMode};
 use color_eyre::eyre;
 use ratatui::{
     Terminal,
@@ -71,12 +71,15 @@ async fn run<B: Backend>(
 ) -> Result<(), std::io::Error> {
     let (msg_tx, mut msg_rx) = mpsc::unbounded_channel();
 
+    let mode_handle = app.mode.clone();
+
     tokio::spawn(async move {
         let mut event = EventHandler::new();
         loop {
             let event = event.next().await;
             if let Some(input::Event::Key(k)) = event {
-                msg_tx.send(input::handler(k)).unwrap()
+                let mode: CurrentMode = { mode_handle.lock().unwrap().clone() };
+                msg_tx.send(input::handler(k, mode)).unwrap()
             };
         }
     });
