@@ -47,7 +47,7 @@ fn folders_block(frame: &mut Frame, app: &App, area: Rect) {
 
     for (i, folder) in (&*app.folders.lock().unwrap()).iter().enumerate() {
         list_items.push(ListItem::new(
-            Line::from(Span::raw(folder.label.clone())).bg(app.highlighted_folder.map_or(
+            Line::from(Span::raw(folder.label.clone())).bg(app.selected_folder.map_or(
                 Color::default(),
                 |highlighted_folder| {
                     if highlighted_folder == i {
