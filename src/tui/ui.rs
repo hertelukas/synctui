@@ -45,19 +45,21 @@ fn folders_block(frame: &mut Frame, app: &App, area: Rect) {
         .split(area);
     let mut list_items = Vec::<ListItem>::new();
 
-    for (i, folder) in (&*app.folders.lock().unwrap()).iter().enumerate() {
-        list_items.push(ListItem::new(
-            Line::from(Span::raw(folder.label.clone())).bg(app.selected_folder.map_or(
-                Color::default(),
-                |highlighted_folder| {
-                    if highlighted_folder == i {
-                        Color::DarkGray
-                    } else {
-                        Color::default()
-                    }
-                },
-            )),
-        ));
+    if let Some(state) = app.state.lock().unwrap().as_ref() {
+        for (i, folder) in state.folders.iter().enumerate() {
+            list_items.push(ListItem::new(
+                Line::from(Span::raw(folder.label.clone())).bg(app.selected_folder.map_or(
+                    Color::default(),
+                    |highlighted_folder| {
+                        if highlighted_folder == i {
+                            Color::DarkGray
+                        } else {
+                            Color::default()
+                        }
+                    },
+                )),
+            ));
+        }
     }
 
     let list = List::new(list_items);
@@ -65,11 +67,27 @@ fn folders_block(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(list, chunks[0]);
 
     if let Some(folder_index) = app.selected_folder {
-        if let Some(folder) = app.folders.lock().unwrap().get(folder_index) {
-            let block = Block::default()
-                .title_top(Line::from(format!("| {} |", folder.label)).centered())
-                .borders(Borders::ALL);
-            frame.render_widget(block, chunks[1]);
+        if let Some(state) = app.state.lock().unwrap().as_ref() {
+            if let Some(folder) = state.folders.get(folder_index) {
+                let block = Block::default()
+                    .title_top(Line::from(format!("| {} |", folder.label)).centered())
+                    .borders(Borders::ALL);
+                // Folder information
+                let mut folder_info = Vec::<ListItem>::new();
+                folder_info.push(ListItem::new(Line::from(format!("ID: {}", folder.id))));
+                folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
+                folder_info.push(ListItem::new(Line::from(format!(
+                    "Shared with {} devices",
+                    folder.get_devices(&state).len()
+                ))));
+                for device in &folder.get_devices(&state) {
+                    folder_info.push(ListItem::new(Line::from(device.name.clone())));
+                }
+                let inner_area = block.inner(chunks[1]);
+                frame.render_widget(block, chunks[1]);
+                let list = List::new(folder_info);
+                frame.render_widget(list, inner_area);
+            }
         }
     }
 }

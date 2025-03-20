@@ -13,15 +13,15 @@ pub struct Folder {
     pub id: String,
     pub label: String,
     pub path: String,
-    devices: Vec<FolderDevice>,
+    pub devices: Vec<FolderDevice>,
 }
 
 /// Representing devices with which we share a folder
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct FolderDevice {
+pub struct FolderDevice {
     #[serde(rename = "deviceID")]
-    device_id: String,
+    pub device_id: String,
     introduced_by: String,
     encryption_password: String,
 }
@@ -30,8 +30,8 @@ struct FolderDevice {
 #[serde(rename_all = "camelCase")]
 pub struct Device {
     #[serde(rename = "deviceID")]
-    device_id: String,
-    name: String,
+    pub device_id: String,
+    pub name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

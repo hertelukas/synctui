@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use state::State;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -52,7 +53,7 @@ pub struct App {
     reload_tx: UnboundedSender<()>,
     pub running: bool,
     pub current_screen: CurrentScreen,
-    pub folders: Arc<Mutex<Vec<state::Folder>>>,
+    pub state: Arc<Mutex<Option<State>>>,
     pub selected_folder: Option<usize>,
     pub error: Arc<Mutex<Option<AppError>>>,
     pub mode: Arc<Mutex<CurrentMode>>,
@@ -65,7 +66,7 @@ impl App {
             reload_tx,
             running: true,
             current_screen: CurrentScreen::default(),
-            folders: Arc::new(Mutex::new(vec![])),
+            state: Arc::new(Mutex::new(None)),
             selected_folder: None,
             error: Arc::new(Mutex::new(None)),
             mode: Arc::new(Mutex::new(CurrentMode::Normal)),
@@ -76,14 +77,14 @@ impl App {
 
     fn load_folders(&self) {
         let reload_tx = self.reload_tx.clone();
-        let folders_handle = self.folders.clone();
+        let state_handle = self.state.clone();
         let error_handle = self.error.clone();
         let client = self.client.clone();
         tokio::spawn(async move {
             let config = client.get_configuration().await;
             match config {
                 Ok(conf) => {
-                    *folders_handle.lock().unwrap() = conf.into();
+                    *state_handle.lock().unwrap() = Some(conf.into());
                 }
                 Err(e) => *error_handle.lock().unwrap() = Some(e),
             }
@@ -96,14 +97,26 @@ impl App {
         match msg {
             Message::Down => {
                 if let Some(highlighted_folder) = self.selected_folder {
-                    self.selected_folder =
-                        Some((highlighted_folder + 1) % self.folders.lock().unwrap().len())
+                    self.selected_folder = Some(
+                        (highlighted_folder + 1)
+                            % self
+                                .state
+                                .lock()
+                                .unwrap()
+                                .as_ref()
+                                .map_or(0, |state| state.folders.len()),
+                    )
                 } else {
                     self.selected_folder = Some(0);
                 }
             }
             Message::Up => {
-                let len = self.folders.lock().unwrap().len();
+                let len = self
+                    .state
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map_or(0, |state| state.folders.len());
                 if let Some(highlighted_folder) = self.selected_folder {
                     self.selected_folder = Some((highlighted_folder + len - 1) % len)
                 } else {
@@ -149,40 +162,74 @@ impl App {
 }
 
 mod state {
+    use std::collections::HashMap;
+
     use crate::Configuration;
+
+    #[derive(Debug)]
+    pub struct State {
+        pub folders: Vec<Folder>,
+        pub devices: HashMap<String, Device>,
+    }
 
     #[derive(Debug, PartialEq)]
     pub struct Folder {
-        id: String,
+        pub id: String,
         pub label: String,
-        path: String, // or PathBuf?
-        devices: Vec<Device>,
+        pub path: String, // or PathBuf?
+        device_ids: Vec<String>,
+    }
+
+    impl Folder {
+        pub fn get_devices<'a>(&self, state: &'a State) -> Vec<&'a Device> {
+            self.device_ids
+                .iter()
+                .filter_map(|id| state.devices.get(id))
+                .collect()
+        }
     }
 
     impl From<crate::ty::Folder> for Folder {
         fn from(folder: crate::ty::Folder) -> Self {
+            let mut device_ids = vec![];
+            for device in folder.devices {
+                device_ids.push(device.device_id);
+            }
             Self {
                 id: folder.id,
                 label: folder.label,
                 path: folder.path,
-                devices: vec![], // TODO
+                device_ids,
             }
         }
     }
 
-    impl From<Configuration> for Vec<Folder> {
+    impl From<Configuration> for State {
         fn from(conf: Configuration) -> Self {
-            let mut res = vec![];
-            for folder in conf.folders {
-                res.push(folder.into());
+            let mut folders = vec![];
+            let mut devices: HashMap<String, Device> = HashMap::new();
+            for device in conf.devices {
+                devices.insert(device.device_id.clone(), device.into());
             }
-            res
+            for folder in conf.folders {
+                folders.push(folder.into());
+            }
+            Self { folders, devices }
         }
     }
 
     #[derive(Debug, PartialEq)]
     pub struct Device {
         id: String,
-        name: String,
+        pub name: String,
+    }
+
+    impl From<crate::ty::Device> for Device {
+        fn from(value: crate::ty::Device) -> Self {
+            Self {
+                id: value.device_id,
+                name: value.name,
+            }
+        }
     }
 }
