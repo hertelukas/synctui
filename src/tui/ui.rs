@@ -31,7 +31,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
     let inner_area = background.inner(frame.area());
     match app.current_screen {
         CurrentScreen::Folders => folders_block(frame, app, inner_area),
-        _ => unimplemented!(),
+        CurrentScreen::Devices => devices_block(frame, app, inner_area),
     };
 
     frame.render_widget(background, frame.area());
@@ -87,6 +87,48 @@ fn folders_block(frame: &mut Frame, app: &App, area: Rect) {
                 frame.render_widget(block, chunks[1]);
                 let list = List::new(folder_info);
                 frame.render_widget(list, inner_area);
+            }
+        }
+    }
+}
+
+/// Renders the devices page
+fn devices_block(frame: &mut Frame, app: &App, area: Rect) {
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
+
+    let mut devices_list = Vec::<ListItem>::new();
+
+    if let Some(state) = app.state.lock().unwrap().as_ref() {
+        for (i, device) in state.get_devices().iter().enumerate() {
+            devices_list.push(ListItem::new(
+                Line::from(Span::raw(device.name.clone())).bg(app.selected_device.map_or(
+                    Color::default(),
+                    |highlighted_device| {
+                        if highlighted_device == i {
+                            Color::DarkGray
+                        } else {
+                            Color::default()
+                        }
+                    },
+                )),
+            ));
+        }
+    }
+
+    let list = List::new(devices_list);
+
+    frame.render_widget(list, chunks[0]);
+
+    if let Some(device_index) = app.selected_device {
+        if let Some(state) = app.state.lock().unwrap().as_ref() {
+            if let Some(device) = state.get_devices().get(device_index) {
+                let block = Block::default()
+                    .title_top(Line::from(format!("| {} |", device.name)).centered())
+                    .borders(Borders::ALL);
+                frame.render_widget(block, chunks[1]);
             }
         }
     }

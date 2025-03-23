@@ -55,6 +55,7 @@ pub struct App {
     pub current_screen: CurrentScreen,
     pub state: Arc<Mutex<Option<State>>>,
     pub selected_folder: Option<usize>,
+    pub selected_device: Option<usize>,
     pub error: Arc<Mutex<Option<AppError>>>,
     pub mode: Arc<Mutex<CurrentMode>>,
 }
@@ -68,18 +69,20 @@ impl App {
             current_screen: CurrentScreen::default(),
             state: Arc::new(Mutex::new(None)),
             selected_folder: None,
+            selected_device: None,
             error: Arc::new(Mutex::new(None)),
             mode: Arc::new(Mutex::new(CurrentMode::Normal)),
         };
-        app.load_folders();
+        app.reload_configuration();
         app
     }
 
-    fn load_folders(&self) {
+    fn reload_configuration(&self) {
         let reload_tx = self.reload_tx.clone();
         let state_handle = self.state.clone();
         let error_handle = self.error.clone();
         let client = self.client.clone();
+        // Spawn a thread which notifies our UI as soon as we get an API response
         tokio::spawn(async move {
             let config = client.get_configuration().await;
             match config {
@@ -123,10 +126,42 @@ impl App {
                     self.selected_folder = Some(len - 1);
                 }
             }
-            Message::Reload => {
-                self.load_folders();
-            }
             Message::Select => {}
+            _ => {}
+        };
+        None
+    }
+
+    fn update_devices(&mut self, msg: Message) -> Option<Message> {
+        match msg {
+            Message::Down => {
+                if let Some(highlighted_device) = self.selected_device {
+                    self.selected_device = Some(
+                        (highlighted_device + 1)
+                            % self
+                                .state
+                                .lock()
+                                .unwrap()
+                                .as_ref()
+                                .map_or(0, |state| state.devices.len()),
+                    )
+                } else {
+                    self.selected_device = Some(0)
+                }
+            }
+            Message::Up => {
+                let len = self
+                    .state
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .map_or(0, |state| state.devices.len());
+                if let Some(highlighted_device) = self.selected_device {
+                    self.selected_device = Some((highlighted_device + len - 1) % len)
+                } else {
+                    self.selected_device = Some(len - 1);
+                }
+            }
             _ => {}
         };
         None
@@ -151,12 +186,15 @@ impl App {
             Message::Normal => {
                 *self.mode.lock().unwrap() = CurrentMode::Normal;
             }
+            Message::Reload => {
+                self.reload_configuration();
+            }
             _ => {}
         }
 
         match self.current_screen {
             CurrentScreen::Folders => self.update_folders(msg),
-            _ => None,
+            CurrentScreen::Devices => self.update_devices(msg),
         }
     }
 }
@@ -169,7 +207,17 @@ mod state {
     #[derive(Debug)]
     pub struct State {
         pub folders: Vec<Folder>,
+        /// Maps device_id to devices
         pub devices: HashMap<String, Device>,
+    }
+
+    impl State {
+        pub fn get_devices(&self) -> Vec<&Device> {
+            let mut res: Vec<&Device> = self.devices.values().collect();
+
+            res.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            res
+        }
     }
 
     #[derive(Debug, PartialEq)]
