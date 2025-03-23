@@ -6,7 +6,10 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{AppError, Client};
 
-use super::input::Message;
+use super::{
+    input::Message,
+    popup::{NewFolderPopup, Popup},
+};
 
 #[derive(Default, Debug, strum::EnumIter, PartialEq)]
 pub enum CurrentScreen {
@@ -58,6 +61,7 @@ pub struct App {
     pub selected_device: Option<usize>,
     pub error: Arc<Mutex<Option<AppError>>>,
     pub mode: Arc<Mutex<CurrentMode>>,
+    pub popup: Option<Box<dyn Popup>>,
 }
 
 impl App {
@@ -72,6 +76,7 @@ impl App {
             selected_device: None,
             error: Arc::new(Mutex::new(None)),
             mode: Arc::new(Mutex::new(CurrentMode::Normal)),
+            popup: None,
         };
         app.reload_configuration();
         app
@@ -126,7 +131,9 @@ impl App {
                     self.selected_folder = Some(len - 1);
                 }
             }
-            Message::Select => {}
+            Message::Add => {
+                self.popup = Some(Box::new(NewFolderPopup::new()));
+            }
             _ => {}
         };
         None
@@ -168,7 +175,18 @@ impl App {
     }
 
     pub fn update(&mut self, msg: Message) -> Option<Message> {
-        // First, handle global messages
+        // First, we handle popups
+        if let Some(popup) = &self.popup {
+            if let Some(msg) = popup.update(msg, self.state.clone()) {
+                match msg {
+                    Message::Quit => self.popup = None,
+                    _ => {}
+                }
+            }
+            return None;
+        };
+
+        // If there is none, handle global messages
         match msg {
             Message::Quit => {
                 self.running = false;
@@ -199,7 +217,7 @@ impl App {
     }
 }
 
-mod state {
+pub mod state {
     use std::collections::HashMap;
 
     use crate::Configuration;

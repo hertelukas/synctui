@@ -35,6 +35,10 @@ pub fn ui(frame: &mut Frame, app: &App) {
     };
 
     frame.render_widget(background, frame.area());
+
+    if let Some(popup) = &app.popup {
+        popup.render(frame);
+    }
 }
 
 /// Renders the folders page

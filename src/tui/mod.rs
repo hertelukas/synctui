@@ -20,6 +20,7 @@ use crate::Client;
 
 mod app;
 mod input;
+mod popup;
 mod ui;
 
 pub async fn start(client: Client) -> eyre::Result<()> {

@@ -22,6 +22,7 @@ pub enum Message {
     Right,
     Left,
     // General
+    Add,
     Quit,
     Reload,
     Select,
@@ -38,6 +39,7 @@ pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
             KeyCode::Char('l') | KeyCode::Right => Message::Right,
             KeyCode::Char('h') | KeyCode::Left => Message::Left,
             KeyCode::Char('i') => Message::Insert,
+            KeyCode::Char('+') | KeyCode::Char('o') => Message::Add,
             KeyCode::Enter => Message::Select,
             KeyCode::Char(a) => {
                 if let Some(a) = a.to_digit(10) {
