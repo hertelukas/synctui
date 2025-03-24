@@ -28,6 +28,8 @@ pub enum Message {
     Quit,
     Reload,
     Select,
+    // Popups
+    NewFolder(String, String, String),
     None,
 }
 

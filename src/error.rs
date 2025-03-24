@@ -8,4 +8,6 @@ pub enum AppError {
     SyncthingIDError,
     #[error(transparent)]
     ToStrError(#[from] reqwest::header::ToStrError),
+    #[error("folder ID already exists")]
+    DuplicateFolderID,
 }

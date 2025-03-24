@@ -19,6 +19,18 @@ pub struct Folder {
     xattr_filter: XattrFilter,
 }
 
+impl Folder {
+    pub fn new(id: String, label: String, path: String) -> Self {
+        Self {
+            id,
+            label,
+            path,
+            devices: vec![],
+            xattr_filter: XattrFilter::default(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct XattrFilter {

@@ -4,7 +4,7 @@ use state::State;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{AppError, Client};
+use crate::{AppError, Client, ty::Folder};
 
 use super::{
     input::Message,
@@ -196,11 +196,39 @@ impl App {
         None
     }
 
+    fn handle_new_folder(&mut self, id: String, label: String, path: String) -> Option<Message> {
+        // Raise an error if we have a duplicate id
+        if let Some(state) = self.state.lock().unwrap().as_ref() {
+            if state.folders.iter().any(|f| f.id == id) {
+                *self.error.lock().unwrap() = Some(AppError::DuplicateFolderID);
+                return None;
+            }
+        }
+
+        // TODO maybe check that path is valid
+
+        let reload_tx = self.reload_tx.clone();
+        let client = self.client.clone();
+        let error_handle = self.error.clone();
+        tokio::spawn(async move {
+            if let Err(e) = client.post_folder(Folder::new(id, label, path)).await {
+                *error_handle.lock().unwrap() = Some(e)
+            }
+            // TODO might make sense to reload the config here somehow
+            reload_tx.send(()).unwrap();
+        });
+        None
+    }
+
     pub fn update(&mut self, msg: Message) -> Option<Message> {
-        // Mode switches take always priority
+        // Mode switches and popup results take always priority
         match msg {
             Message::Insert => *self.mode.lock().unwrap() = CurrentMode::Insert,
             Message::Normal => *self.mode.lock().unwrap() = CurrentMode::Normal,
+            Message::NewFolder(id, label, path) => {
+                self.popup = None;
+                return self.handle_new_folder(id, label, path);
+            }
             _ => {}
         }
 
@@ -209,7 +237,9 @@ impl App {
             if let Some(msg) = popup.update(msg, self.state.clone()) {
                 match msg {
                     Message::Quit => self.popup = None,
-                    _ => {}
+                    // All other messages from the popup are handles in the next
+                    // iteration, normally. This allows for greater flexibility
+                    _ => return Some(msg),
                 }
             }
             return None;

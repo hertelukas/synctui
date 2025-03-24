@@ -116,6 +116,7 @@ impl TextBox {
 #[derive(Debug)]
 pub struct NewFolderPopup {
     id_input: TextBox,
+    label_input: TextBox,
     path_input: TextBox,
     focus: NewFolderFocus,
     mode: Arc<Mutex<CurrentMode>>,
@@ -125,6 +126,7 @@ pub struct NewFolderPopup {
 enum NewFolderFocus {
     #[default]
     Path,
+    Label,
     Id,
 }
 
@@ -132,6 +134,7 @@ impl NewFolderPopup {
     pub fn new(mode: Arc<Mutex<CurrentMode>>) -> Self {
         Self {
             id_input: TextBox::default(),
+            label_input: TextBox::default(),
             path_input: TextBox::default(),
             focus: NewFolderFocus::default(),
             mode,
@@ -141,27 +144,39 @@ impl NewFolderPopup {
 
 impl Popup for NewFolderPopup {
     fn update(&mut self, msg: Message, _: Arc<Mutex<Option<State>>>) -> Option<Message> {
+        let input = match self.focus {
+            NewFolderFocus::Id => &mut self.id_input,
+            NewFolderFocus::Label => &mut self.label_input,
+            NewFolderFocus::Path => &mut self.path_input,
+        };
+
         match msg {
             Message::Quit => return Some(Message::Quit),
-            Message::Character(c) => match self.focus {
-                NewFolderFocus::Path => self.path_input.enter_char(c),
-                NewFolderFocus::Id => self.id_input.enter_char(c),
+            Message::Character(c) => input.enter_char(c),
+            Message::Backspace => input.delete_char(),
+            Message::Left => input.move_cursor_left(),
+            Message::Right => input.move_cursor_right(),
+            Message::FocusNext | Message::Down => match self.focus {
+                NewFolderFocus::Path => self.focus = NewFolderFocus::Label,
+                NewFolderFocus::Label => self.focus = NewFolderFocus::Id,
+                _ => {}
             },
-            Message::Left => match self.focus {
-                NewFolderFocus::Path => self.path_input.move_cursor_left(),
-                NewFolderFocus::Id => self.id_input.move_cursor_left(),
+            Message::Up => match self.focus {
+                NewFolderFocus::Id => self.focus = NewFolderFocus::Label,
+                NewFolderFocus::Label => self.focus = NewFolderFocus::Path,
+                _ => {}
             },
-            Message::Right => match self.focus {
-                NewFolderFocus::Path => self.path_input.move_cursor_right(),
-                NewFolderFocus::Id => self.id_input.move_cursor_right(),
-            },
-            Message::FocusNext | Message::Down | Message::Up => match self.focus {
-                NewFolderFocus::Path => self.focus = NewFolderFocus::Id,
-                NewFolderFocus::Id => self.focus = NewFolderFocus::Path,
-            },
-            Message::Backspace => match self.focus {
-                NewFolderFocus::Id => self.id_input.delete_char(),
-                NewFolderFocus::Path => self.path_input.delete_char(),
+            Message::Select => match self.focus {
+                NewFolderFocus::Id => {
+                    *self.mode.lock().unwrap() = CurrentMode::Normal;
+                    return Some(Message::NewFolder(
+                        self.id_input.text.clone(),
+                        self.label_input.text.clone(),
+                        self.path_input.text.clone(),
+                    ));
+                }
+                NewFolderFocus::Path => self.focus = NewFolderFocus::Label,
+                NewFolderFocus::Label => self.focus = NewFolderFocus::Id,
             },
             _ => {}
         };
@@ -174,11 +189,12 @@ impl Popup for NewFolderPopup {
             Constraint::Length(1),
             Constraint::Length(3),
             Constraint::Length(3),
+            Constraint::Length(3),
         ]);
 
         let area = centered_rect(50, 50, frame.area());
         Clear.render(area, frame.buffer_mut());
-        let [_, path_area, id_area] = vertical.areas(area.inner(Margin {
+        let [_, path_area, label_area, id_area] = vertical.areas(area.inner(Margin {
             horizontal: 1,
             vertical: 1,
         }));
@@ -186,15 +202,22 @@ impl Popup for NewFolderPopup {
         let path_input = Paragraph::new(self.path_input.text.as_str())
             .style(match self.focus {
                 NewFolderFocus::Path => Style::default().fg(Color::Blue),
-                NewFolderFocus::Id => Style::default(),
+                _ => Style::default(),
             })
             .block(Block::bordered().title("Path"));
+
+        let label_input = Paragraph::new(self.label_input.text.as_str())
+            .style(match self.focus {
+                NewFolderFocus::Label => Style::default().fg(Color::Blue),
+                _ => Style::default(),
+            })
+            .block(Block::bordered().title("Label"));
 
         let id_input = Paragraph::new(self.id_input.text.as_str())
             .style(match self.focus {
                 // TODO check if valid (unique) and if not, make red
                 NewFolderFocus::Id => Style::default().fg(Color::Blue),
-                NewFolderFocus::Path => Style::default(),
+                _ => Style::default(),
             })
             .block(Block::bordered().title("ID"));
 
@@ -203,6 +226,7 @@ impl Popup for NewFolderPopup {
             let (cursor_area, index) = match self.focus {
                 NewFolderFocus::Path => (path_area, self.path_input.index),
                 NewFolderFocus::Id => (id_area, self.id_input.index),
+                NewFolderFocus::Label => (label_area, self.label_input.index),
             };
             frame.set_cursor_position(Position::new(
                 cursor_area.x + index as u16 + 1,
@@ -212,6 +236,7 @@ impl Popup for NewFolderPopup {
 
         frame.render_widget(block, area);
         frame.render_widget(path_input, path_area);
+        frame.render_widget(label_input, label_area);
         frame.render_widget(id_input, id_area);
     }
 }

@@ -86,7 +86,7 @@ impl Client {
     }
 
     /// Creates a new folder, or updates it, if it already exists.
-    pub async fn post_folder(&self, folder: Folder) -> eyre::Result<()> {
+    pub async fn post_folder(&self, folder: Folder) -> eyre::Result<(), AppError> {
         self.client
             .post(format!("{}/config/folders", ADDR))
             .json(&folder)
