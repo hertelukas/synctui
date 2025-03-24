@@ -2,6 +2,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
 
+/// Represents the Syncthing configuration XML object.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Configuration {
     pub folders: Vec<Folder>,

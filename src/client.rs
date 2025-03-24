@@ -2,16 +2,20 @@ use color_eyre::eyre;
 use reqwest::header;
 use tokio::sync::mpsc::Sender;
 
-use crate::{AppError, Configuration, Event};
+use crate::{AppError, Configuration, Event, ty::Folder};
 
 const ADDR: &str = "http://localhost:8384/rest";
 
+/// Abstraction to interact with the syncthing API.
 #[derive(Debug, Clone)]
 pub struct Client {
     client: reqwest::Client,
 }
 
 impl Client {
+    /// Creates a new HTTP client, with which the syncthing API can be used.
+    /// The API can either be generated in the GUI of syncthing or set
+    /// in the configuration file under `configuration/gui/apikey`.
     pub fn new(api_key: &str) -> eyre::Result<Self> {
         let mut headers = header::HeaderMap::new();
         let mut api_key_header = header::HeaderValue::from_str(api_key)?;
@@ -33,6 +37,7 @@ impl Client {
         Ok(())
     }
 
+    /// GET the entire config
     pub async fn get_configuration(&self) -> eyre::Result<Configuration, AppError> {
         Ok(self
             .client
@@ -44,6 +49,8 @@ impl Client {
             .await?)
     }
 
+    /// Only returns if an error is encountered.
+    /// Transmits every new event over `tx`.
     pub async fn get_events(&self, tx: Sender<Event>) -> eyre::Result<()> {
         let mut current_id = 0;
         loop {
@@ -61,5 +68,17 @@ impl Client {
                 tx.send(event).await?;
             }
         }
+    }
+
+    /// Creates a new folder, or updates it, if it already exists.
+    pub async fn post_folder(&self, folder: Folder) -> eyre::Result<()> {
+        self.client
+            .post(format!("{}/config/folders", ADDR))
+            .json(&folder)
+            .send()
+            .await?
+            .error_for_status()?;
+
+        Ok(())
     }
 }
