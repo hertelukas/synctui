@@ -28,6 +28,21 @@ impl Client {
         Ok(Self { client })
     }
 
+    /// Returns the syncthing ID of the local device
+    pub async fn get_id(&self) -> eyre::Result<String, AppError> {
+        Ok(self
+            .client
+            .get(format!("{}/system/ping", ADDR))
+            .send()
+            .await?
+            .error_for_status()?
+            .headers()
+            .get("X-Syncthing-Id")
+            .ok_or(AppError::SyncthingIDError)?
+            .to_str()?
+            .to_string())
+    }
+
     pub async fn ping(&self) -> eyre::Result<()> {
         self.client
             .get(format!("{}/system/ping", ADDR))

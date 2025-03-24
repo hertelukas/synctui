@@ -1,3 +1,4 @@
+use qrcode::QrCode;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
@@ -6,6 +7,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
 };
 use strum::IntoEnumIterator;
+use tui_qrcode::QrCodeWidget;
 
 use super::app::{App, CurrentScreen};
 
@@ -32,6 +34,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
     match app.current_screen {
         CurrentScreen::Folders => folders_block(frame, app, inner_area),
         CurrentScreen::Devices => devices_block(frame, app, inner_area),
+        CurrentScreen::ID => qr_code_block(frame, app, inner_area),
     };
 
     frame.render_widget(background, frame.area());
@@ -135,6 +138,16 @@ fn devices_block(frame: &mut Frame, app: &App, area: Rect) {
                 frame.render_widget(block, chunks[1]);
             }
         }
+    }
+}
+
+fn qr_code_block(frame: &mut Frame, app: &App, area: Rect) {
+    if let Some(id) = app.id.lock().unwrap().as_ref() {
+        let qr_code = QrCode::new(id).expect("could not generate QR code");
+        let widget = QrCodeWidget::new(qr_code);
+        frame.render_widget(widget, area);
+    } else {
+        app.load_id();
     }
 }
 

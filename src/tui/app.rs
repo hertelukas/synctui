@@ -16,6 +16,7 @@ pub enum CurrentScreen {
     #[default]
     Folders,
     Devices,
+    ID,
 }
 
 /// VIM modes
@@ -62,6 +63,7 @@ pub struct App {
     pub error: Arc<Mutex<Option<AppError>>>,
     pub mode: Arc<Mutex<CurrentMode>>,
     pub popup: Option<Box<dyn Popup>>,
+    pub id: Arc<Mutex<Option<String>>>,
 }
 
 impl App {
@@ -77,6 +79,7 @@ impl App {
             error: Arc::new(Mutex::new(None)),
             mode: Arc::new(Mutex::new(CurrentMode::Normal)),
             popup: None,
+            id: Arc::new(Mutex::new(None)),
         };
         app.reload_configuration();
         app
@@ -93,6 +96,25 @@ impl App {
             match config {
                 Ok(conf) => {
                     *state_handle.lock().unwrap() = Some(conf.into());
+                }
+                Err(e) => *error_handle.lock().unwrap() = Some(e),
+            }
+
+            reload_tx.send(()).unwrap();
+        });
+    }
+
+    pub fn load_id(&self) {
+        let reload_tx = self.reload_tx.clone();
+        let id_handle = self.id.clone();
+        let error_handle = self.error.clone();
+        let client = self.client.clone();
+        // Spawn a thread which notifies our UI as soon as we get an API response
+        tokio::spawn(async move {
+            let id = client.get_id().await;
+            match id {
+                Ok(id) => {
+                    *id_handle.lock().unwrap() = Some(id);
                 }
                 Err(e) => *error_handle.lock().unwrap() = Some(e),
             }
@@ -215,6 +237,7 @@ impl App {
         match self.current_screen {
             CurrentScreen::Folders => self.update_folders(msg),
             CurrentScreen::Devices => self.update_devices(msg),
+            _ => None,
         }
     }
 }
