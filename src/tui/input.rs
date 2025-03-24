@@ -12,10 +12,12 @@ pub enum Message {
     // Vim
     Insert,
     Normal,
-    // Character
+    // Input
     Character(char),
+    Backspace,
     // Navigation
     Number(u32),
+    FocusNext,
     // Movement
     Up,
     Down,
@@ -41,6 +43,7 @@ pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
             KeyCode::Char('i') => Message::Insert,
             KeyCode::Char('+') | KeyCode::Char('o') => Message::Add,
             KeyCode::Enter => Message::Select,
+            KeyCode::Tab => Message::FocusNext,
             KeyCode::Char(a) => {
                 if let Some(a) = a.to_digit(10) {
                     Message::Number(a)
@@ -52,8 +55,16 @@ pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
         }
     } else {
         match key_event.code {
+            KeyCode::Char('+') => Message::Add,
             KeyCode::Char(a) => Message::Character(a),
+            KeyCode::Backspace => Message::Backspace,
+            KeyCode::Down => Message::Down,
+            KeyCode::Up => Message::Up,
+            KeyCode::Right => Message::Right,
+            KeyCode::Left => Message::Left,
             KeyCode::Esc => Message::Normal,
+            KeyCode::Enter => Message::Select,
+            KeyCode::Tab => Message::FocusNext,
             _ => Message::None,
         }
     }

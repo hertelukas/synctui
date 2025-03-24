@@ -132,7 +132,7 @@ impl App {
                 }
             }
             Message::Add => {
-                self.popup = Some(Box::new(NewFolderPopup::new()));
+                self.popup = Some(Box::new(NewFolderPopup::default()));
             }
             _ => {}
         };
@@ -175,8 +175,15 @@ impl App {
     }
 
     pub fn update(&mut self, msg: Message) -> Option<Message> {
-        // First, we handle popups
-        if let Some(popup) = &self.popup {
+        // Mode switches take always priority
+        match msg {
+            Message::Insert => *self.mode.lock().unwrap() = CurrentMode::Insert,
+            Message::Normal => *self.mode.lock().unwrap() = CurrentMode::Normal,
+            _ => {}
+        }
+
+        // Then, we handle popups if one exists
+        if let Some(popup) = self.popup.as_mut() {
             if let Some(msg) = popup.update(msg, self.state.clone()) {
                 match msg {
                     Message::Quit => self.popup = None,
@@ -198,18 +205,13 @@ impl App {
                     return None;
                 }
             }
-            Message::Insert => {
-                *self.mode.lock().unwrap() = CurrentMode::Insert;
-            }
-            Message::Normal => {
-                *self.mode.lock().unwrap() = CurrentMode::Normal;
-            }
             Message::Reload => {
                 self.reload_configuration();
             }
             _ => {}
         }
 
+        // Handle screen specific keys
         match self.current_screen {
             CurrentScreen::Folders => self.update_folders(msg),
             CurrentScreen::Devices => self.update_devices(msg),
