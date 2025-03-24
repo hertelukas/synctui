@@ -9,11 +9,31 @@ pub struct Configuration {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct Folder {
     pub id: String,
     pub label: String,
     pub path: String,
     pub devices: Vec<FolderDevice>,
+    xattr_filter: XattrFilter,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct XattrFilter {
+    entries: Vec<String>,
+    max_single_entry_size: u64,
+    max_total_size: u64,
+}
+
+impl Default for XattrFilter {
+    fn default() -> Self {
+        Self {
+            entries: Default::default(),
+            max_single_entry_size: 1024,
+            max_total_size: 4096,
+        }
+    }
 }
 
 /// Representing devices with which we share a folder
