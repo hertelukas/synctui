@@ -2,13 +2,16 @@ use std::sync::{Arc, Mutex};
 
 use ratatui::{
     Frame,
-    layout::{Constraint, Direction, Layout, Margin, Rect},
+    layout::{Constraint, Direction, Layout, Margin, Position, Rect},
     style::{Color, Style},
     text::Line,
     widgets::{Block, Borders, Paragraph},
 };
 
-use super::{app::state::State, input::Message};
+use super::{
+    app::{CurrentMode, state::State},
+    input::Message,
+};
 
 pub trait Popup: std::fmt::Debug {
     /// Updates the state of the popup. If Some(Quit) is returned, the popup gets destroyed
@@ -110,11 +113,12 @@ impl TextBox {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct NewFolderPopup {
     id_input: TextBox,
     path_input: TextBox,
     focus: NewFolderFocus,
+    mode: Arc<Mutex<CurrentMode>>,
 }
 
 #[derive(Default, Debug)]
@@ -122,6 +126,17 @@ enum NewFolderFocus {
     #[default]
     Path,
     Id,
+}
+
+impl NewFolderPopup {
+    pub fn new(mode: Arc<Mutex<CurrentMode>>) -> Self {
+        Self {
+            id_input: TextBox::default(),
+            path_input: TextBox::default(),
+            focus: NewFolderFocus::default(),
+            mode,
+        }
+    }
 }
 
 impl Popup for NewFolderPopup {
@@ -181,6 +196,18 @@ impl Popup for NewFolderPopup {
                 NewFolderFocus::Path => Style::default(),
             })
             .block(Block::bordered().title("ID"));
+
+        // Show cursors
+        if *self.mode.lock().unwrap() == CurrentMode::Insert {
+            let (cursor_area, index) = match self.focus {
+                NewFolderFocus::Path => (path_area, self.path_input.index),
+                NewFolderFocus::Id => (id_area, self.id_input.index),
+            };
+            frame.set_cursor_position(Position::new(
+                cursor_area.x + index as u16 + 1,
+                cursor_area.y + 1,
+            ));
+        }
 
         frame.render_widget(block, area);
         frame.render_widget(path_input, path_area);

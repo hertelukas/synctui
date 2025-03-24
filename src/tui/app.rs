@@ -154,7 +154,7 @@ impl App {
                 }
             }
             Message::Add => {
-                self.popup = Some(Box::new(NewFolderPopup::default()));
+                self.popup = Some(Box::new(NewFolderPopup::new(self.mode.clone())));
             }
             _ => {}
         };
