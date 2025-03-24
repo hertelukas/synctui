@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Margin, Position, Rect},
     style::{Color, Style},
     text::Line,
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
 use super::{
@@ -177,6 +177,7 @@ impl Popup for NewFolderPopup {
         ]);
 
         let area = centered_rect(50, 50, frame.area());
+        Clear.render(area, frame.buffer_mut());
         let [_, path_area, id_area] = vertical.areas(area.inner(Margin {
             horizontal: 1,
             vertical: 1,
