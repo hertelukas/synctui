@@ -82,8 +82,13 @@ fn folders_block(frame: &mut Frame, app: &App, area: Rect) {
             folder_info.push(ListItem::new(Line::from(format!("ID: {}", folder.id))));
             folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
             folder_info.push(ListItem::new(Line::from(format!(
-                "Shared with {} devices",
-                folder.get_devices(&state).len()
+                "Shared with {} device{}",
+                folder.get_devices(&state).len(),
+                if folder.get_devices(&state).len() == 1 {
+                    ""
+                } else {
+                    "s"
+                }
             ))));
             for device in &folder.get_devices(&state) {
                 folder_info.push(ListItem::new(Line::from(device.name.clone())));
@@ -105,7 +110,14 @@ fn devices_block(frame: &mut Frame, app: &App, area: Rect) {
 
     let mut devices_list = Vec::<ListItem>::new();
 
-    for (i, device) in app.state.lock().unwrap().get_devices().iter().enumerate() {
+    for (i, device) in app
+        .state
+        .lock()
+        .unwrap()
+        .get_other_devices()
+        .iter()
+        .enumerate()
+    {
         devices_list.push(ListItem::new(
             Line::from(Span::raw(device.name.clone())).bg(app.selected_device.map_or(
                 Color::default(),

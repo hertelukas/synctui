@@ -323,6 +323,13 @@ pub mod state {
             res.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
             res
         }
+
+        pub fn get_other_devices(&self) -> Vec<&Device> {
+            self.get_devices()
+                .into_iter()
+                .filter(|device| device.id != self.id)
+                .collect()
+        }
     }
 
     #[derive(Debug, PartialEq)]
@@ -335,11 +342,15 @@ pub mod state {
 
     impl Folder {
         pub fn get_devices<'a>(&self, state: &'a State) -> Vec<&'a Device> {
-            self.device_ids
+            let mut res: Vec<_> = self
+                .device_ids
                 .iter()
                 .filter(|id| **id != state.id)
                 .filter_map(|id| state.devices.get(id))
-                .collect()
+                .collect();
+
+            res.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+            res
         }
     }
 
