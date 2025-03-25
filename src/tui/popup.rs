@@ -15,7 +15,7 @@ use super::{
 
 pub trait Popup: std::fmt::Debug {
     /// Updates the state of the popup. If Some(Quit) is returned, the popup gets destroyed
-    fn update(&mut self, msg: Message, state: Arc<Mutex<Option<State>>>) -> Option<Message>;
+    fn update(&mut self, msg: Message, state: Arc<Mutex<State>>) -> Option<Message>;
     fn render(&self, frame: &mut Frame);
     fn create_popup_block(&self, title: String) -> Block {
         let block = Block::default()
@@ -143,7 +143,7 @@ impl NewFolderPopup {
 }
 
 impl Popup for NewFolderPopup {
-    fn update(&mut self, msg: Message, _: Arc<Mutex<Option<State>>>) -> Option<Message> {
+    fn update(&mut self, msg: Message, _: Arc<Mutex<State>>) -> Option<Message> {
         let input = match self.focus {
             NewFolderFocus::Id => &mut self.id_input,
             NewFolderFocus::Label => &mut self.label_input,

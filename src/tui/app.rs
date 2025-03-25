@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use state::State;
 use strum::IntoEnumIterator;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::{AppError, Client, ty::Folder};
 
@@ -57,13 +57,12 @@ pub struct App {
     reload_tx: UnboundedSender<()>,
     pub running: bool,
     pub current_screen: CurrentScreen,
-    pub state: Arc<Mutex<Option<State>>>,
+    pub state: Arc<Mutex<State>>,
     pub selected_folder: Option<usize>,
     pub selected_device: Option<usize>,
     pub error: Arc<Mutex<Option<AppError>>>,
     pub mode: Arc<Mutex<CurrentMode>>,
     pub popup: Option<Box<dyn Popup>>,
-    pub id: Arc<Mutex<Option<String>>>,
 }
 
 impl App {
@@ -73,15 +72,39 @@ impl App {
             reload_tx,
             running: true,
             current_screen: CurrentScreen::default(),
-            state: Arc::new(Mutex::new(None)),
+            state: Arc::new(Mutex::new(State::default())),
             selected_folder: None,
             selected_device: None,
             error: Arc::new(Mutex::new(None)),
             mode: Arc::new(Mutex::new(CurrentMode::Normal)),
             popup: None,
-            id: Arc::new(Mutex::new(None)),
         };
+        app.load_id();
         app.reload_configuration();
+
+        // React to events
+        let reload_tx = app.reload_tx.clone();
+        let state_handle = app.state.clone();
+        let error_handle = app.error.clone();
+        let client = app.client.clone();
+
+        let (tx_event, mut rx_event) = mpsc::channel(10);
+
+        // Start listening to events
+        tokio::spawn(async move {
+            if let Err(e) = client.get_events(tx_event).await {
+                *error_handle.lock().unwrap() = Some(e)
+            };
+        });
+
+        // Update state.events if we get a new one
+        tokio::spawn(async move {
+            while let Some(event) = rx_event.recv().await {
+                state_handle.lock().unwrap().events.push(event);
+            }
+            reload_tx.send(()).unwrap();
+        });
+
         app
     }
 
@@ -95,7 +118,7 @@ impl App {
             let config = client.get_configuration().await;
             match config {
                 Ok(conf) => {
-                    *state_handle.lock().unwrap() = Some(conf.into());
+                    state_handle.lock().unwrap().update_from_configuration(conf);
                 }
                 Err(e) => *error_handle.lock().unwrap() = Some(e),
             }
@@ -106,7 +129,7 @@ impl App {
 
     pub fn load_id(&self) {
         let reload_tx = self.reload_tx.clone();
-        let id_handle = self.id.clone();
+        let state_handle = self.state.clone();
         let error_handle = self.error.clone();
         let client = self.client.clone();
         // Spawn a thread which notifies our UI as soon as we get an API response
@@ -114,7 +137,7 @@ impl App {
             let id = client.get_id().await;
             match id {
                 Ok(id) => {
-                    *id_handle.lock().unwrap() = Some(id);
+                    state_handle.lock().unwrap().id = id;
                 }
                 Err(e) => *error_handle.lock().unwrap() = Some(e),
             }
@@ -126,27 +149,23 @@ impl App {
     fn update_folders(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Down => {
+                let len = self.state.lock().unwrap().folders.len();
+                if len == 0 {
+                    return None;
+                }
                 if let Some(highlighted_folder) = self.selected_folder {
-                    self.selected_folder = Some(
-                        (highlighted_folder + 1)
-                            % self
-                                .state
-                                .lock()
-                                .unwrap()
-                                .as_ref()
-                                .map_or(0, |state| state.folders.len()),
-                    )
+                    self.selected_folder =
+                        Some((highlighted_folder + 1) % self.state.lock().unwrap().folders.len())
                 } else {
                     self.selected_folder = Some(0);
                 }
             }
             Message::Up => {
-                let len = self
-                    .state
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .map_or(0, |state| state.folders.len());
+                let len = self.state.lock().unwrap().folders.len();
+                if len == 0 {
+                    return None;
+                }
+
                 if let Some(highlighted_folder) = self.selected_folder {
                     self.selected_folder = Some((highlighted_folder + len - 1) % len)
                 } else {
@@ -164,27 +183,23 @@ impl App {
     fn update_devices(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Down => {
+                let len = self.state.lock().unwrap().devices.len();
+                if len == 0 {
+                    return None;
+                }
+
                 if let Some(highlighted_device) = self.selected_device {
-                    self.selected_device = Some(
-                        (highlighted_device + 1)
-                            % self
-                                .state
-                                .lock()
-                                .unwrap()
-                                .as_ref()
-                                .map_or(0, |state| state.devices.len()),
-                    )
+                    self.selected_device =
+                        Some((highlighted_device + 1) % self.state.lock().unwrap().devices.len())
                 } else {
                     self.selected_device = Some(0)
                 }
             }
             Message::Up => {
-                let len = self
-                    .state
-                    .lock()
-                    .unwrap()
-                    .as_ref()
-                    .map_or(0, |state| state.devices.len());
+                let len = self.state.lock().unwrap().devices.len();
+                if len == 0 {
+                    return None;
+                }
                 if let Some(highlighted_device) = self.selected_device {
                     self.selected_device = Some((highlighted_device + len - 1) % len)
                 } else {
@@ -198,11 +213,16 @@ impl App {
 
     fn handle_new_folder(&mut self, id: String, label: String, path: String) -> Option<Message> {
         // Raise an error if we have a duplicate id
-        if let Some(state) = self.state.lock().unwrap().as_ref() {
-            if state.folders.iter().any(|f| f.id == id) {
-                *self.error.lock().unwrap() = Some(AppError::DuplicateFolderID);
-                return None;
-            }
+        if self
+            .state
+            .lock()
+            .unwrap()
+            .folders
+            .iter()
+            .any(|f| f.id == id)
+        {
+            *self.error.lock().unwrap() = Some(AppError::DuplicateFolderID);
+            return None;
         }
 
         // TODO maybe check that path is valid
@@ -275,16 +295,28 @@ impl App {
 pub mod state {
     use std::collections::HashMap;
 
-    use crate::Configuration;
+    use crate::{Configuration, Event};
 
-    #[derive(Debug)]
+    #[derive(Debug, Default)]
     pub struct State {
         pub folders: Vec<Folder>,
         /// Maps device_id to devices
         pub devices: HashMap<String, Device>,
+        pub events: Vec<Event>,
+        pub id: String,
     }
 
     impl State {
+        pub fn update_from_configuration(&mut self, configuration: Configuration) {
+            self.folders.clear();
+            self.devices.clear();
+            for device in configuration.devices {
+                self.devices.insert(device.device_id.clone(), device.into());
+            }
+            for folder in configuration.folders {
+                self.folders.push(folder.into());
+            }
+        }
         pub fn get_devices(&self) -> Vec<&Device> {
             let mut res: Vec<&Device> = self.devices.values().collect();
 
@@ -305,6 +337,7 @@ pub mod state {
         pub fn get_devices<'a>(&self, state: &'a State) -> Vec<&'a Device> {
             self.device_ids
                 .iter()
+                .filter(|id| **id != state.id)
                 .filter_map(|id| state.devices.get(id))
                 .collect()
         }
@@ -322,20 +355,6 @@ pub mod state {
                 path: folder.path,
                 device_ids,
             }
-        }
-    }
-
-    impl From<Configuration> for State {
-        fn from(conf: Configuration) -> Self {
-            let mut folders = vec![];
-            let mut devices: HashMap<String, Device> = HashMap::new();
-            for device in conf.devices {
-                devices.insert(device.device_id.clone(), device.into());
-            }
-            for folder in conf.folders {
-                folders.push(folder.into());
-            }
-            Self { folders, devices }
         }
     }
 

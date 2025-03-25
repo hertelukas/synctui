@@ -66,7 +66,7 @@ impl Client {
 
     /// Only returns if an error is encountered.
     /// Transmits every new event over `tx`.
-    pub async fn get_events(&self, tx: Sender<Event>) -> eyre::Result<()> {
+    pub async fn get_events(&self, tx: Sender<Event>) -> eyre::Result<(), AppError> {
         let mut current_id = 0;
         loop {
             let events: Vec<Event> = self

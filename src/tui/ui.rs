@@ -52,21 +52,19 @@ fn folders_block(frame: &mut Frame, app: &App, area: Rect) {
         .split(area);
     let mut list_items = Vec::<ListItem>::new();
 
-    if let Some(state) = app.state.lock().unwrap().as_ref() {
-        for (i, folder) in state.folders.iter().enumerate() {
-            list_items.push(ListItem::new(
-                Line::from(Span::raw(folder.label.clone())).bg(app.selected_folder.map_or(
-                    Color::default(),
-                    |highlighted_folder| {
-                        if highlighted_folder == i {
-                            Color::DarkGray
-                        } else {
-                            Color::default()
-                        }
-                    },
-                )),
-            ));
-        }
+    for (i, folder) in app.state.lock().unwrap().folders.iter().enumerate() {
+        list_items.push(ListItem::new(
+            Line::from(Span::raw(folder.label.clone())).bg(app.selected_folder.map_or(
+                Color::default(),
+                |highlighted_folder| {
+                    if highlighted_folder == i {
+                        Color::DarkGray
+                    } else {
+                        Color::default()
+                    }
+                },
+            )),
+        ));
     }
 
     let list = List::new(list_items);
@@ -74,27 +72,26 @@ fn folders_block(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(list, chunks[0]);
 
     if let Some(folder_index) = app.selected_folder {
-        if let Some(state) = app.state.lock().unwrap().as_ref() {
-            if let Some(folder) = state.folders.get(folder_index) {
-                let block = Block::default()
-                    .title_top(Line::from(format!("| {} |", folder.label)).centered())
-                    .borders(Borders::ALL);
-                // Folder information
-                let mut folder_info = Vec::<ListItem>::new();
-                folder_info.push(ListItem::new(Line::from(format!("ID: {}", folder.id))));
-                folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
-                folder_info.push(ListItem::new(Line::from(format!(
-                    "Shared with {} devices",
-                    folder.get_devices(&state).len()
-                ))));
-                for device in &folder.get_devices(&state) {
-                    folder_info.push(ListItem::new(Line::from(device.name.clone())));
-                }
-                let inner_area = block.inner(chunks[1]);
-                frame.render_widget(block, chunks[1]);
-                let list = List::new(folder_info);
-                frame.render_widget(list, inner_area);
+        let state = app.state.lock().unwrap();
+        if let Some(folder) = state.folders.get(folder_index) {
+            let block = Block::default()
+                .title_top(Line::from(format!("| {} |", folder.label)).centered())
+                .borders(Borders::ALL);
+            // Folder information
+            let mut folder_info = Vec::<ListItem>::new();
+            folder_info.push(ListItem::new(Line::from(format!("ID: {}", folder.id))));
+            folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
+            folder_info.push(ListItem::new(Line::from(format!(
+                "Shared with {} devices",
+                folder.get_devices(&state).len()
+            ))));
+            for device in &folder.get_devices(&state) {
+                folder_info.push(ListItem::new(Line::from(device.name.clone())));
             }
+            let inner_area = block.inner(chunks[1]);
+            frame.render_widget(block, chunks[1]);
+            let list = List::new(folder_info);
+            frame.render_widget(list, inner_area);
         }
     }
 }
@@ -108,21 +105,19 @@ fn devices_block(frame: &mut Frame, app: &App, area: Rect) {
 
     let mut devices_list = Vec::<ListItem>::new();
 
-    if let Some(state) = app.state.lock().unwrap().as_ref() {
-        for (i, device) in state.get_devices().iter().enumerate() {
-            devices_list.push(ListItem::new(
-                Line::from(Span::raw(device.name.clone())).bg(app.selected_device.map_or(
-                    Color::default(),
-                    |highlighted_device| {
-                        if highlighted_device == i {
-                            Color::DarkGray
-                        } else {
-                            Color::default()
-                        }
-                    },
-                )),
-            ));
-        }
+    for (i, device) in app.state.lock().unwrap().get_devices().iter().enumerate() {
+        devices_list.push(ListItem::new(
+            Line::from(Span::raw(device.name.clone())).bg(app.selected_device.map_or(
+                Color::default(),
+                |highlighted_device| {
+                    if highlighted_device == i {
+                        Color::DarkGray
+                    } else {
+                        Color::default()
+                    }
+                },
+            )),
+        ));
     }
 
     let list = List::new(devices_list);
@@ -130,25 +125,20 @@ fn devices_block(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(list, chunks[0]);
 
     if let Some(device_index) = app.selected_device {
-        if let Some(state) = app.state.lock().unwrap().as_ref() {
-            if let Some(device) = state.get_devices().get(device_index) {
-                let block = Block::default()
-                    .title_top(Line::from(format!("| {} |", device.name)).centered())
-                    .borders(Borders::ALL);
-                frame.render_widget(block, chunks[1]);
-            }
+        if let Some(device) = app.state.lock().unwrap().get_devices().get(device_index) {
+            let block = Block::default()
+                .title_top(Line::from(format!("| {} |", device.name)).centered())
+                .borders(Borders::ALL);
+            frame.render_widget(block, chunks[1]);
         }
     }
 }
 
 fn qr_code_block(frame: &mut Frame, app: &App, area: Rect) {
-    if let Some(id) = app.id.lock().unwrap().as_ref() {
-        let qr_code = QrCode::new(id).expect("could not generate QR code");
-        let widget = QrCodeWidget::new(qr_code);
-        frame.render_widget(widget, area);
-    } else {
-        app.load_id();
-    }
+    let qr_code =
+        QrCode::new(app.state.lock().unwrap().id.clone()).expect("could not generate QR code");
+    let widget = QrCodeWidget::new(qr_code);
+    frame.render_widget(widget, area);
 }
 
 fn create_background(app: &App) -> Block {
