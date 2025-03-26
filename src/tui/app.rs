@@ -1,10 +1,11 @@
 use std::sync::{Arc, Mutex};
 
+use log::error;
 use state::State;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::{self, UnboundedSender};
 
-use crate::{AppError, Client, ty::Folder};
+use crate::{AppError, Client};
 
 use super::{
     input::Message,
@@ -93,6 +94,7 @@ impl App {
         // Start listening to events
         tokio::spawn(async move {
             if let Err(e) = client.get_events(tx_event).await {
+                error!("Failed to get events: {:?}", e);
                 *error_handle.lock().unwrap() = Some(e)
             };
         });
@@ -120,7 +122,10 @@ impl App {
                 Ok(conf) => {
                     state_handle.lock().unwrap().update_from_configuration(conf);
                 }
-                Err(e) => *error_handle.lock().unwrap() = Some(e),
+                Err(e) => {
+                    error!("Failed to reload config: {:?}", e);
+                    *error_handle.lock().unwrap() = Some(e);
+                }
             }
 
             reload_tx.send(()).unwrap();
@@ -173,7 +178,10 @@ impl App {
                 }
             }
             Message::Add => {
-                self.popup = Some(Box::new(NewFolderPopup::new(self.mode.clone())));
+                self.popup = Some(Box::new(NewFolderPopup::new(
+                    self.mode.clone(),
+                    self.state.clone(),
+                )));
             }
             _ => {}
         };
@@ -211,7 +219,7 @@ impl App {
         None
     }
 
-    fn handle_new_folder(&mut self, id: String, label: String, path: String) -> Option<Message> {
+    fn handle_new_folder(&mut self, folder: crate::ty::Folder) -> Option<Message> {
         // Raise an error if we have a duplicate id
         if self
             .state
@@ -219,7 +227,7 @@ impl App {
             .unwrap()
             .folders
             .iter()
-            .any(|f| f.id == id)
+            .any(|f| f.id == folder.id)
         {
             *self.error.lock().unwrap() = Some(AppError::DuplicateFolderID);
             return None;
@@ -231,7 +239,7 @@ impl App {
         let client = self.client.clone();
         let error_handle = self.error.clone();
         tokio::spawn(async move {
-            if let Err(e) = client.post_folder(Folder::new(id, label, path)).await {
+            if let Err(e) = client.post_folder(folder).await {
                 *error_handle.lock().unwrap() = Some(e)
             }
             // TODO might make sense to reload the config here somehow
@@ -245,9 +253,9 @@ impl App {
         match msg {
             Message::Insert => *self.mode.lock().unwrap() = CurrentMode::Insert,
             Message::Normal => *self.mode.lock().unwrap() = CurrentMode::Normal,
-            Message::NewFolder(id, label, path) => {
+            Message::NewFolder(folder) => {
                 self.popup = None;
-                return self.handle_new_folder(id, label, path);
+                return self.handle_new_folder(folder);
             }
             _ => {}
         }
@@ -371,7 +379,7 @@ pub mod state {
 
     #[derive(Debug, PartialEq)]
     pub struct Device {
-        id: String,
+        pub id: String,
         pub name: String,
     }
 
@@ -381,6 +389,12 @@ pub mod state {
                 id: value.device_id,
                 name: value.name,
             }
+        }
+    }
+
+    impl Into<crate::ty::FolderDevice> for &Device {
+        fn into(self) -> crate::ty::FolderDevice {
+            crate::ty::FolderDevice::new(&self.id)
         }
     }
 }

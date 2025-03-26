@@ -1,3 +1,4 @@
+use crossterm::event::KeyModifiers;
 use futures::StreamExt;
 use log::debug;
 use ratatui::crossterm::{
@@ -18,6 +19,7 @@ pub enum Message {
     // Navigation
     Number(u32),
     FocusNext,
+    FocusBack,
     // Movement
     Up,
     Down,
@@ -28,12 +30,22 @@ pub enum Message {
     Quit,
     Reload,
     Select,
+    Submit,
     // Popups
-    NewFolder(String, String, String),
+    NewFolder(crate::ty::Folder),
     None,
 }
 
 pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
+    // Shift overwrites everything
+    if key_event.modifiers.contains(KeyModifiers::SHIFT) {
+        return match key_event.code {
+            // BUG this does not work on Linux and Mac
+            KeyCode::Enter => Message::Submit,
+            _ => Message::None,
+        };
+    };
+
     if mode == CurrentMode::Normal {
         match key_event.code {
             KeyCode::Char('r') => Message::Reload,
@@ -46,6 +58,7 @@ pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
             KeyCode::Char('+') | KeyCode::Char('o') => Message::Add,
             KeyCode::Enter => Message::Select,
             KeyCode::Tab => Message::FocusNext,
+            KeyCode::BackTab => Message::FocusBack,
             KeyCode::Char(a) => {
                 if let Some(a) = a.to_digit(10) {
                     Message::Number(a)
@@ -67,6 +80,7 @@ pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
             KeyCode::Esc => Message::Normal,
             KeyCode::Enter => Message::Select,
             KeyCode::Tab => Message::FocusNext,
+            KeyCode::BackTab => Message::FocusBack,
             _ => Message::None,
         }
     }

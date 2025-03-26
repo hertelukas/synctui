@@ -1,4 +1,5 @@
 use color_eyre::eyre;
+use log::debug;
 use reqwest::header;
 use tokio::sync::mpsc::Sender;
 
@@ -30,6 +31,7 @@ impl Client {
 
     /// Returns the syncthing ID of the local device
     pub async fn get_id(&self) -> eyre::Result<String, AppError> {
+        debug!("GET /ping for ID");
         Ok(self
             .client
             .get(format!("{}/system/ping", ADDR))
@@ -44,6 +46,7 @@ impl Client {
     }
 
     pub async fn ping(&self) -> eyre::Result<()> {
+        debug!("GET /ping");
         self.client
             .get(format!("{}/system/ping", ADDR))
             .send()
@@ -54,6 +57,7 @@ impl Client {
 
     /// GET the entire config
     pub async fn get_configuration(&self) -> eyre::Result<Configuration, AppError> {
+        debug!("GET /config");
         Ok(self
             .client
             .get(format!("{}/config", ADDR))
@@ -69,6 +73,7 @@ impl Client {
     pub async fn get_events(&self, tx: Sender<Event>) -> eyre::Result<(), AppError> {
         let mut current_id = 0;
         loop {
+            debug!("GET /events");
             let events: Vec<Event> = self
                 .client
                 .get(format!("{}/events?since={}", ADDR, current_id))
@@ -78,6 +83,7 @@ impl Client {
                 .json()
                 .await?;
 
+            debug!("Received {} new events", events.len());
             for event in events {
                 current_id = event.id;
                 tx.send(event).await?;
@@ -87,6 +93,7 @@ impl Client {
 
     /// Creates a new folder, or updates it, if it already exists.
     pub async fn post_folder(&self, folder: Folder) -> eyre::Result<(), AppError> {
+        debug!("POST /config/folders {:#?}", folder);
         self.client
             .post(format!("{}/config/folders", ADDR))
             .json(&folder)

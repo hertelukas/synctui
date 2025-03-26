@@ -9,7 +9,7 @@ pub struct Configuration {
     pub devices: Vec<Device>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Folder {
     pub id: String,
@@ -20,18 +20,18 @@ pub struct Folder {
 }
 
 impl Folder {
-    pub fn new(id: String, label: String, path: String) -> Self {
+    pub fn new(id: String, label: String, path: String, devices: Vec<FolderDevice>) -> Self {
         Self {
             id,
             label,
             path,
-            devices: vec![],
+            devices,
             xattr_filter: XattrFilter::default(),
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 struct XattrFilter {
     entries: Vec<String>,
@@ -50,13 +50,23 @@ impl Default for XattrFilter {
 }
 
 /// Representing devices with which we share a folder
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct FolderDevice {
     #[serde(rename = "deviceID")]
     pub device_id: String,
     introduced_by: String,
     encryption_password: String,
+}
+
+impl FolderDevice {
+    pub fn new(id: &str) -> Self {
+        Self {
+            device_id: id.to_string(),
+            introduced_by: String::new(),
+            encryption_password: String::new(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -137,4 +147,6 @@ enum ConnectionType {
     RelayClient,
     #[serde(rename = "relay-server")]
     RelayServer,
+    #[serde(rename = "quic-server")]
+    QuicServer,
 }

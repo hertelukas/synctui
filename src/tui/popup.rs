@@ -1,10 +1,13 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Position, Rect},
     style::{Color, Style},
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
@@ -120,64 +123,129 @@ pub struct NewFolderPopup {
     path_input: TextBox,
     focus: NewFolderFocus,
     mode: Arc<Mutex<CurrentMode>>,
+    state: Arc<Mutex<State>>,
+    selected_devices: HashSet<String>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, Eq)]
 enum NewFolderFocus {
     #[default]
     Path,
     Label,
     Id,
+    Device(usize),
 }
 
 impl NewFolderPopup {
-    pub fn new(mode: Arc<Mutex<CurrentMode>>) -> Self {
+    pub fn new(mode: Arc<Mutex<CurrentMode>>, state: Arc<Mutex<State>>) -> Self {
         Self {
             id_input: TextBox::default(),
             label_input: TextBox::default(),
             path_input: TextBox::default(),
             focus: NewFolderFocus::default(),
             mode,
+            state,
+            selected_devices: HashSet::new(),
         }
+    }
+
+    fn select_next(&mut self) {
+        match self.focus {
+            NewFolderFocus::Path => self.focus = NewFolderFocus::Label,
+            NewFolderFocus::Label => self.focus = NewFolderFocus::Id,
+            NewFolderFocus::Id => {
+                if self.state.lock().unwrap().get_other_devices().len() > 0 {
+                    self.focus = NewFolderFocus::Device(0)
+                }
+            }
+            NewFolderFocus::Device(i) => {
+                self.focus = NewFolderFocus::Device(
+                    (i + 1).min(self.state.lock().unwrap().get_other_devices().len() - 1),
+                )
+            }
+        };
+    }
+
+    fn select_prev(&mut self) {
+        match self.focus {
+            NewFolderFocus::Id => self.focus = NewFolderFocus::Label,
+            NewFolderFocus::Label => self.focus = NewFolderFocus::Path,
+            NewFolderFocus::Device(i) => {
+                if i == 0 {
+                    self.focus = NewFolderFocus::Id;
+                } else {
+                    self.focus = NewFolderFocus::Device(i - 1);
+                }
+            }
+            _ => {}
+        };
     }
 }
 
 impl Popup for NewFolderPopup {
     fn update(&mut self, msg: Message, _: Arc<Mutex<State>>) -> Option<Message> {
         let input = match self.focus {
-            NewFolderFocus::Id => &mut self.id_input,
-            NewFolderFocus::Label => &mut self.label_input,
-            NewFolderFocus::Path => &mut self.path_input,
+            NewFolderFocus::Id => Some(&mut self.id_input),
+            NewFolderFocus::Label => Some(&mut self.label_input),
+            NewFolderFocus::Path => Some(&mut self.path_input),
+            _ => None,
         };
+
+        if let Some(input) = input {
+            match msg {
+                Message::Character(c) => input.enter_char(c),
+                Message::Backspace => input.delete_char(),
+                Message::Left => input.move_cursor_left(),
+                Message::Right => input.move_cursor_right(),
+                _ => {}
+            }
+        }
 
         match msg {
             Message::Quit => return Some(Message::Quit),
-            Message::Character(c) => input.enter_char(c),
-            Message::Backspace => input.delete_char(),
-            Message::Left => input.move_cursor_left(),
-            Message::Right => input.move_cursor_right(),
-            Message::FocusNext | Message::Down => match self.focus {
-                NewFolderFocus::Path => self.focus = NewFolderFocus::Label,
-                NewFolderFocus::Label => self.focus = NewFolderFocus::Id,
-                _ => {}
-            },
-            Message::Up => match self.focus {
-                NewFolderFocus::Id => self.focus = NewFolderFocus::Label,
-                NewFolderFocus::Label => self.focus = NewFolderFocus::Path,
-                _ => {}
-            },
-            Message::Select => match self.focus {
-                NewFolderFocus::Id => {
-                    *self.mode.lock().unwrap() = CurrentMode::Normal;
-                    return Some(Message::NewFolder(
-                        self.id_input.text.clone(),
-                        self.label_input.text.clone(),
-                        self.path_input.text.clone(),
-                    ));
+            Message::FocusNext | Message::Down => self.select_next(),
+            Message::FocusBack | Message::Up => self.select_prev(),
+            Message::Left => {
+                if let NewFolderFocus::Device(i) = self.focus {
+                    if i > 0 {
+                        self.select_prev();
+                    }
                 }
-                NewFolderFocus::Path => self.focus = NewFolderFocus::Label,
-                NewFolderFocus::Label => self.focus = NewFolderFocus::Id,
+            }
+            Message::Right => {
+                if let NewFolderFocus::Device(_) = self.focus {
+                    self.select_next();
+                }
+            }
+            Message::Select => match self.focus {
+                NewFolderFocus::Device(i) => {
+                    if let Some(device) = self.state.lock().unwrap().get_other_devices().get(i) {
+                        if self.selected_devices.contains(&device.id) {
+                            self.selected_devices.remove(&device.id);
+                        } else {
+                            self.selected_devices.insert(device.id.clone());
+                        }
+                    }
+                }
+                _ => self.select_next(),
             },
+            Message::Submit => {
+                *self.mode.lock().unwrap() = CurrentMode::Normal;
+                let folder_devices: Vec<_> = {
+                    let devices = &self.state.lock().unwrap().devices;
+                    self.selected_devices
+                        .iter()
+                        .filter_map(|device_id| devices.get(device_id).map(|device| device.into()))
+                        .collect()
+                };
+
+                return Some(Message::NewFolder(crate::ty::Folder::new(
+                    self.id_input.text.clone(),
+                    self.label_input.text.clone(),
+                    self.path_input.text.clone(),
+                    folder_devices,
+                )));
+            }
             _ => {}
         };
         None
@@ -190,14 +258,16 @@ impl Popup for NewFolderPopup {
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
+            Constraint::Length(1),
         ]);
 
         let area = centered_rect(50, 50, frame.area());
         Clear.render(area, frame.buffer_mut());
-        let [_, path_area, label_area, id_area] = vertical.areas(area.inner(Margin {
-            horizontal: 1,
-            vertical: 1,
-        }));
+        let [_, path_area, label_area, id_area, devices_area] =
+            vertical.areas(area.inner(Margin {
+                horizontal: 1,
+                vertical: 1,
+            }));
 
         let path_input = Paragraph::new(self.path_input.text.as_str())
             .style(match self.focus {
@@ -221,22 +291,53 @@ impl Popup for NewFolderPopup {
             })
             .block(Block::bordered().title("ID"));
 
+        let devices_line: Line = self
+            .state
+            .lock()
+            .unwrap()
+            .get_other_devices()
+            .iter()
+            .enumerate()
+            .map(|(i, device)| {
+                let style = if self.focus == NewFolderFocus::Device(i) {
+                    Style::new().fg(Color::Blue)
+                } else {
+                    Style::new()
+                };
+                let selected_char = if self.selected_devices.contains(&device.id) {
+                    "✓"
+                } else {
+                    "☐"
+                };
+                Span::styled(
+                    format!("| {} {} ", selected_char, device.name.clone()),
+                    style,
+                )
+            })
+            .collect();
+
+        let devices_select = Paragraph::new(devices_line);
+
         // Show cursors
         if *self.mode.lock().unwrap() == CurrentMode::Insert {
             let (cursor_area, index) = match self.focus {
                 NewFolderFocus::Path => (path_area, self.path_input.index),
                 NewFolderFocus::Id => (id_area, self.id_input.index),
                 NewFolderFocus::Label => (label_area, self.label_input.index),
+                _ => (area, 0),
             };
-            frame.set_cursor_position(Position::new(
-                cursor_area.x + index as u16 + 1,
-                cursor_area.y + 1,
-            ));
+            if !matches!(self.focus, NewFolderFocus::Device(_)) {
+                frame.set_cursor_position(Position::new(
+                    cursor_area.x + index as u16 + 1,
+                    cursor_area.y + 1,
+                ));
+            }
         }
 
         frame.render_widget(block, area);
         frame.render_widget(path_input, path_area);
         frame.render_widget(label_input, label_area);
         frame.render_widget(id_input, id_area);
+        frame.render_widget(devices_select, devices_area);
     }
 }
