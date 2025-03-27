@@ -14,4 +14,6 @@ pub enum AppError {
     DuplicateFolderID,
     #[error(transparent)]
     SendEventError(#[from] tokio::sync::mpsc::error::SendError<ty::Event>),
+    #[error(transparent)]
+    SendUnitError(#[from] tokio::sync::mpsc::error::SendError<()>),
 }

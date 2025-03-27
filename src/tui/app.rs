@@ -1,11 +1,11 @@
 use std::sync::{Arc, Mutex};
 
-use log::error;
+use log::{debug, error};
 use state::State;
 use strum::IntoEnumIterator;
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender, UnboundedSender};
 
-use crate::{AppError, Client};
+use crate::{AppError, Client, Event, ty::EventType};
 
 use super::{
     input::Message,
@@ -55,7 +55,8 @@ impl TryFrom<u32> for CurrentScreen {
 #[derive(Debug)]
 pub struct App {
     pub client: Client,
-    reload_tx: UnboundedSender<()>,
+    rerender_tx: UnboundedSender<()>,
+    reload_config_tx: Sender<()>,
     pub running: bool,
     pub current_screen: CurrentScreen,
     pub state: Arc<Mutex<State>>,
@@ -67,10 +68,12 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(client: Client, reload_tx: UnboundedSender<()>) -> Self {
+    pub fn new(client: Client, rerender_tx: UnboundedSender<()>) -> Self {
+        let (reload_config_tx, reload_config_rx) = mpsc::channel(10);
         let app = App {
             client,
-            reload_tx,
+            rerender_tx,
+            reload_config_tx: reload_config_tx.clone(),
             running: true,
             current_screen: CurrentScreen::default(),
             state: Arc::new(Mutex::new(State::default())),
@@ -81,59 +84,138 @@ impl App {
             popup: None,
         };
         app.load_id();
-        app.reload_configuration();
 
         // React to events
-        let reload_tx = app.reload_tx.clone();
+        let rerender_tx = app.rerender_tx.clone();
         let state_handle = app.state.clone();
         let error_handle = app.error.clone();
         let client = app.client.clone();
 
-        let (tx_event, mut rx_event) = mpsc::channel(10);
+        let (event_tx, event_rx) = mpsc::channel(10);
 
         // Start listening to events
         tokio::spawn(async move {
-            if let Err(e) = client.get_events(tx_event).await {
+            if let Err(e) = client.get_events(event_tx).await {
                 error!("failed to get events: {:?}", e);
                 *error_handle.lock().unwrap() = Some(e)
             };
         });
 
+        let error_handle = app.error.clone();
+        let reload_config_tx = reload_config_tx;
         // Update state.events if we get a new one
         tokio::spawn(async move {
-            while let Some(event) = rx_event.recv().await {
-                state_handle.lock().unwrap().events.push(event);
-            }
-            reload_tx.send(()).unwrap();
+            Self::handle_event(
+                state_handle,
+                event_rx,
+                reload_config_tx,
+                error_handle,
+                rerender_tx,
+            )
+            .await
         });
+
+        // Let everyone who ownes a reload_config_tx handle to update the config
+        let rerender_tx = app.rerender_tx.clone();
+        let state_handle = app.state.clone();
+        let error_handle = app.error.clone();
+        let client = app.client.clone();
+        tokio::spawn(async move {
+            Self::handle_reload_configuration(
+                reload_config_rx,
+                client,
+                state_handle,
+                rerender_tx,
+                error_handle,
+            )
+            .await
+        });
+
+        app.reload_configuration();
 
         app
     }
 
-    fn reload_configuration(&self) {
-        let reload_tx = self.reload_tx.clone();
-        let state_handle = self.state.clone();
-        let error_handle = self.error.clone();
-        let client = self.client.clone();
-        // Spawn a thread which notifies our UI as soon as we get an API response
-        tokio::spawn(async move {
+    async fn handle_event(
+        state: Arc<Mutex<State>>,
+        mut event_rx: Receiver<Event>,
+        reload_config_tx: Sender<()>,
+        error: Arc<Mutex<Option<AppError>>>,
+        _rerender_tx: UnboundedSender<()>,
+    ) {
+        while let Some(event) = event_rx.recv().await {
+            debug!("Received event: {:?}", event);
+            match event.ty {
+                EventType::ConfigSaved {} => {
+                    if let Err(e) = reload_config_tx.send(()).await {
+                        error!(
+                            "failed to initiate configuration reload due to new saved config: {}",
+                            e
+                        );
+                        *error.lock().unwrap() = Some(e.into());
+                    }
+                }
+                _ => {}
+            }
+            state.lock().unwrap().events.push(event);
+        }
+    }
+
+    async fn handle_reload_configuration(
+        mut reload_rx: Receiver<()>,
+        client: Client,
+        state: Arc<Mutex<State>>,
+        rerender_tx: UnboundedSender<()>,
+        error: Arc<Mutex<Option<AppError>>>,
+    ) {
+        while let Some(_) = reload_rx.recv().await {
             let config = client.get_configuration().await;
             match config {
                 Ok(conf) => {
-                    state_handle.lock().unwrap().update_from_configuration(conf);
+                    state.lock().unwrap().update_from_configuration(conf);
                 }
                 Err(e) => {
                     error!("failed to reload config: {:?}", e);
-                    *error_handle.lock().unwrap() = Some(e);
+                    *error.lock().unwrap() = Some(e);
                 }
             }
 
-            reload_tx.send(()).unwrap();
+            rerender_tx.send(()).unwrap();
+        }
+    }
+
+    fn reload_configuration(&self) {
+        // let reload_tx = self.rerender_tx.clone();
+        // let state_handle = self.state.clone();
+        // let error_handle = self.error.clone();
+        // let client = self.client.clone();
+        // // Spawn a thread which notifies our UI as soon as we get an API response
+        // tokio::spawn(async move {
+        //     let config = client.get_configuration().await;
+        //     match config {
+        //         Ok(conf) => {
+        //             state_handle.lock().unwrap().update_from_configuration(conf);
+        //         }
+        //         Err(e) => {
+        //             error!("failed to reload config: {:?}", e);
+        //             *error_handle.lock().unwrap() = Some(e);
+        //         }
+        //     }
+
+        //     reload_tx.send(()).unwrap();
+        // });
+        let reload_config_tx = self.reload_config_tx.clone();
+        let error_handle = self.error.clone();
+        tokio::spawn(async move {
+            if let Err(e) = reload_config_tx.send(()).await {
+                error!("failed to initiate configuration reload {:?}", e);
+                *error_handle.lock().unwrap() = Some(e.into());
+            }
         });
     }
 
     pub fn load_id(&self) {
-        let reload_tx = self.reload_tx.clone();
+        let reload_tx = self.rerender_tx.clone();
         let state_handle = self.state.clone();
         let error_handle = self.error.clone();
         let client = self.client.clone();
@@ -238,7 +320,7 @@ impl App {
 
         // TODO maybe check that path is valid
 
-        let reload_tx = self.reload_tx.clone();
+        let reload_tx = self.rerender_tx.clone();
         let client = self.client.clone();
         let error_handle = self.error.clone();
         tokio::spawn(async move {

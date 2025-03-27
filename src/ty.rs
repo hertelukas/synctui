@@ -85,12 +85,12 @@ pub struct Event {
     global_id: u64,
     time: chrono::DateTime<Utc>,
     #[serde(flatten)]
-    ty: EventType,
+    pub ty: EventType,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type", content = "data")]
-enum EventType {
+pub enum EventType {
     ClusterConfigReceived {},
     ConfigSaved {},
     #[serde(rename_all = "camelCase")]
@@ -138,7 +138,7 @@ enum EventType {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-enum ConnectionType {
+pub enum ConnectionType {
     #[serde(rename = "tcp-client")]
     TCPClient,
     #[serde(rename = "tcp-server")]
