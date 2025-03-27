@@ -67,8 +67,9 @@ pub struct App {
     pub popup: Option<Box<dyn Popup>>,
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Reload {
+    ID,
     Configuration,
     PendingDevices,
     PendingFolders,
@@ -90,7 +91,6 @@ impl App {
             mode: Arc::new(Mutex::new(CurrentMode::Normal)),
             popup: None,
         };
-        app.load_id();
 
         // React to events
         let rerender_tx = app.rerender_tx.clone();
@@ -124,12 +124,14 @@ impl App {
             Self::handle_reload(reload_rx, client, state_handle, rerender_tx, error_handle).await
         });
 
-        app.reload_configuration();
-        app.reload_pending_devices();
+        app.reload(Reload::ID);
+        app.reload(Reload::Configuration);
+        app.reload(Reload::PendingDevices);
 
         app
     }
 
+    /// Runs in the background and reacts to Syncthing events.
     async fn handle_event(
         state: Arc<Mutex<State>>,
         mut event_rx: Receiver<Event>,
@@ -161,6 +163,8 @@ impl App {
         }
     }
 
+    /// Runs in the background and allows to initiate to asynchrounously start
+    /// fetching data from the API and updating the current state.
     async fn handle_reload(
         mut reload_rx: Receiver<Reload>,
         client: Client,
@@ -184,56 +188,36 @@ impl App {
 
                     rerender_tx.send(()).unwrap();
                 }
+                Reload::ID => {
+                    let id = client.get_id().await;
+                    match id {
+                        Ok(id) => {
+                            state.lock().unwrap().id = id;
+                        }
+                        Err(e) => {
+                            error!("failed to load Syncthing ID: {:?}", e);
+                            *error.lock().unwrap() = Some(e);
+                        }
+                    }
+                    rerender_tx.send(()).unwrap();
+                }
                 Reload::PendingDevices => {
                     let devices = client.get_pending_devices().await;
-                    debug!("Pending devices: {:?}", devices);
+                    debug!("pending devices: {:?}", devices);
                 }
                 _ => todo!("reloading {:?}", reload),
             }
         }
     }
 
-    fn reload_pending_devices(&self) {
+    fn reload(&self, reload: Reload) {
         let reload_tx = self.reload_tx.clone();
         let error_handle = self.error.clone();
         tokio::spawn(async move {
-            if let Err(e) = reload_tx.send(Reload::PendingDevices).await {
-                error!("failed to initiate pending devices reload {:?}", e);
+            if let Err(e) = reload_tx.send(reload).await {
+                error!("failed to initiate {:?} reload {:?}", reload, e);
                 *error_handle.lock().unwrap() = Some(e.into());
             }
-        });
-    }
-
-    fn reload_configuration(&self) {
-        let reload_config_tx = self.reload_tx.clone();
-        let error_handle = self.error.clone();
-        tokio::spawn(async move {
-            if let Err(e) = reload_config_tx.send(Reload::Configuration).await {
-                error!("failed to initiate configuration reload {:?}", e);
-                *error_handle.lock().unwrap() = Some(e.into());
-            }
-        });
-    }
-
-    pub fn load_id(&self) {
-        let reload_tx = self.rerender_tx.clone();
-        let state_handle = self.state.clone();
-        let error_handle = self.error.clone();
-        let client = self.client.clone();
-        // Spawn a thread which notifies our UI as soon as we get an API response
-        tokio::spawn(async move {
-            let id = client.get_id().await;
-            match id {
-                Ok(id) => {
-                    state_handle.lock().unwrap().id = id;
-                }
-                Err(e) => {
-                    error!("failed to load Syncthing ID: {:?}", e);
-                    *error_handle.lock().unwrap() = Some(e);
-                }
-            }
-
-            reload_tx.send(()).unwrap();
         });
     }
 
@@ -373,7 +357,7 @@ impl App {
                 }
             }
             Message::Reload => {
-                self.reload_configuration();
+                self.reload(Reload::Configuration);
             }
             _ => {}
         }
