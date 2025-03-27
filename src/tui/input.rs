@@ -37,15 +37,6 @@ pub enum Message {
 }
 
 pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
-    // Shift overwrites everything
-    if key_event.modifiers.contains(KeyModifiers::SHIFT) {
-        return match key_event.code {
-            // BUG this does not work on Linux and Mac
-            KeyCode::Enter => Message::Submit,
-            _ => Message::None,
-        };
-    };
-
     if mode == CurrentMode::Normal {
         match key_event.code {
             KeyCode::Char('r') => Message::Reload,
@@ -56,7 +47,14 @@ pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
             KeyCode::Char('h') | KeyCode::Left => Message::Left,
             KeyCode::Char('i') => Message::Insert,
             KeyCode::Char('+') | KeyCode::Char('o') => Message::Add,
-            KeyCode::Enter => Message::Select,
+            KeyCode::Enter => {
+                if key_event.modifiers.contains(KeyModifiers::SHIFT) {
+                    // BUG this does not work on Linux and Mac
+                    Message::Submit
+                } else {
+                    Message::Select
+                }
+            }
             KeyCode::Tab => Message::FocusNext,
             KeyCode::BackTab => Message::FocusBack,
             KeyCode::Char(a) => {
@@ -78,7 +76,14 @@ pub fn handler(key_event: KeyEvent, mode: CurrentMode) -> Message {
             KeyCode::Right => Message::Right,
             KeyCode::Left => Message::Left,
             KeyCode::Esc => Message::Normal,
-            KeyCode::Enter => Message::Select,
+            KeyCode::Enter => {
+                if key_event.modifiers.contains(KeyModifiers::SHIFT) {
+                    // BUG this does not work on Linux and Mac
+                    Message::Submit
+                } else {
+                    Message::Select
+                }
+            }
             KeyCode::Tab => Message::FocusNext,
             KeyCode::BackTab => Message::FocusBack,
             _ => Message::None,
