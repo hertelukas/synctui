@@ -56,7 +56,7 @@ impl TryFrom<u32> for CurrentScreen {
 pub struct App {
     pub client: Client,
     rerender_tx: UnboundedSender<()>,
-    reload_config_tx: Sender<()>,
+    reload_tx: Sender<Reload>,
     pub running: bool,
     pub current_screen: CurrentScreen,
     pub state: Arc<Mutex<State>>,
@@ -67,13 +67,20 @@ pub struct App {
     pub popup: Option<Box<dyn Popup>>,
 }
 
+#[derive(Debug)]
+pub enum Reload {
+    Configuration,
+    PendingDevices,
+    PendingFolders,
+}
+
 impl App {
     pub fn new(client: Client, rerender_tx: UnboundedSender<()>) -> Self {
-        let (reload_config_tx, reload_config_rx) = mpsc::channel(10);
+        let (reload_tx, reload_rx) = mpsc::channel(10);
         let app = App {
             client,
             rerender_tx,
-            reload_config_tx: reload_config_tx.clone(),
+            reload_tx: reload_tx.clone(),
             running: true,
             current_screen: CurrentScreen::default(),
             state: Arc::new(Mutex::new(State::default())),
@@ -102,17 +109,10 @@ impl App {
         });
 
         let error_handle = app.error.clone();
-        let reload_config_tx = reload_config_tx;
+        let reload_tx = reload_tx;
         // Update state.events if we get a new one
         tokio::spawn(async move {
-            Self::handle_event(
-                state_handle,
-                event_rx,
-                reload_config_tx,
-                error_handle,
-                rerender_tx,
-            )
-            .await
+            Self::handle_event(state_handle, event_rx, reload_tx, error_handle, rerender_tx).await
         });
 
         // Let everyone who ownes a reload_config_tx handle to update the config
@@ -121,17 +121,11 @@ impl App {
         let error_handle = app.error.clone();
         let client = app.client.clone();
         tokio::spawn(async move {
-            Self::handle_reload_configuration(
-                reload_config_rx,
-                client,
-                state_handle,
-                rerender_tx,
-                error_handle,
-            )
-            .await
+            Self::handle_reload(reload_rx, client, state_handle, rerender_tx, error_handle).await
         });
 
         app.reload_configuration();
+        app.reload_pending_devices();
 
         app
     }
@@ -139,7 +133,7 @@ impl App {
     async fn handle_event(
         state: Arc<Mutex<State>>,
         mut event_rx: Receiver<Event>,
-        reload_config_tx: Sender<()>,
+        reload_tx: Sender<Reload>,
         error: Arc<Mutex<Option<AppError>>>,
         _rerender_tx: UnboundedSender<()>,
     ) {
@@ -147,11 +141,17 @@ impl App {
             debug!("Received event: {:?}", event);
             match event.ty {
                 EventType::ConfigSaved {} => {
-                    if let Err(e) = reload_config_tx.send(()).await {
+                    if let Err(e) = reload_tx.send(Reload::Configuration).await {
                         error!(
-                            "failed to initiate configuration reload due to new saved config: {}",
+                            "failed to initiate configuration reload due to new saved config: {:?}",
                             e
                         );
+                        *error.lock().unwrap() = Some(e.into());
+                    }
+                }
+                EventType::PendingDevicesChanged {} => {
+                    if let Err(e) = reload_tx.send(Reload::PendingDevices).await {
+                        error!("failed to initiate pending devices reload due: {:?}", e);
                         *error.lock().unwrap() = Some(e.into());
                     }
                 }
@@ -161,53 +161,54 @@ impl App {
         }
     }
 
-    async fn handle_reload_configuration(
-        mut reload_rx: Receiver<()>,
+    async fn handle_reload(
+        mut reload_rx: Receiver<Reload>,
         client: Client,
         state: Arc<Mutex<State>>,
         rerender_tx: UnboundedSender<()>,
         error: Arc<Mutex<Option<AppError>>>,
     ) {
-        while let Some(_) = reload_rx.recv().await {
-            let config = client.get_configuration().await;
-            match config {
-                Ok(conf) => {
-                    state.lock().unwrap().update_from_configuration(conf);
-                }
-                Err(e) => {
-                    error!("failed to reload config: {:?}", e);
-                    *error.lock().unwrap() = Some(e);
-                }
-            }
+        while let Some(reload) = reload_rx.recv().await {
+            match reload {
+                Reload::Configuration => {
+                    let config = client.get_configuration().await;
+                    match config {
+                        Ok(conf) => {
+                            state.lock().unwrap().update_from_configuration(conf);
+                        }
+                        Err(e) => {
+                            error!("failed to reload config: {:?}", e);
+                            *error.lock().unwrap() = Some(e);
+                        }
+                    }
 
-            rerender_tx.send(()).unwrap();
+                    rerender_tx.send(()).unwrap();
+                }
+                Reload::PendingDevices => {
+                    let devices = client.get_pending_devices().await;
+                    debug!("Pending devices: {:?}", devices);
+                }
+                _ => todo!("reloading {:?}", reload),
+            }
         }
     }
 
-    fn reload_configuration(&self) {
-        // let reload_tx = self.rerender_tx.clone();
-        // let state_handle = self.state.clone();
-        // let error_handle = self.error.clone();
-        // let client = self.client.clone();
-        // // Spawn a thread which notifies our UI as soon as we get an API response
-        // tokio::spawn(async move {
-        //     let config = client.get_configuration().await;
-        //     match config {
-        //         Ok(conf) => {
-        //             state_handle.lock().unwrap().update_from_configuration(conf);
-        //         }
-        //         Err(e) => {
-        //             error!("failed to reload config: {:?}", e);
-        //             *error_handle.lock().unwrap() = Some(e);
-        //         }
-        //     }
-
-        //     reload_tx.send(()).unwrap();
-        // });
-        let reload_config_tx = self.reload_config_tx.clone();
+    fn reload_pending_devices(&self) {
+        let reload_tx = self.reload_tx.clone();
         let error_handle = self.error.clone();
         tokio::spawn(async move {
-            if let Err(e) = reload_config_tx.send(()).await {
+            if let Err(e) = reload_tx.send(Reload::PendingDevices).await {
+                error!("failed to initiate pending devices reload {:?}", e);
+                *error_handle.lock().unwrap() = Some(e.into());
+            }
+        });
+    }
+
+    fn reload_configuration(&self) {
+        let reload_config_tx = self.reload_tx.clone();
+        let error_handle = self.error.clone();
+        tokio::spawn(async move {
+            if let Err(e) = reload_config_tx.send(Reload::Configuration).await {
                 error!("failed to initiate configuration reload {:?}", e);
                 *error_handle.lock().unwrap() = Some(e.into());
             }

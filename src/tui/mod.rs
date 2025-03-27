@@ -19,6 +19,7 @@ use ratatui::{
 use crate::Client;
 
 mod app;
+pub use app::Reload;
 mod input;
 mod popup;
 mod ui;

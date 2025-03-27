@@ -1,4 +1,4 @@
-use crate::ty;
+use crate::{tui::Reload, ty};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -16,4 +16,6 @@ pub enum AppError {
     SendEventError(#[from] tokio::sync::mpsc::error::SendError<ty::Event>),
     #[error(transparent)]
     SendUnitError(#[from] tokio::sync::mpsc::error::SendError<()>),
+    #[error(transparent)]
+    SendReloadError(#[from] tokio::sync::mpsc::error::SendError<Reload>),
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
@@ -149,4 +151,16 @@ pub enum ConnectionType {
     RelayServer,
     #[serde(rename = "quic-server")]
     QuicServer,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PendingDevices {
+    #[serde(flatten)]
+    devices: HashMap<String, PendingDevice>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PendingDevice {
+    time: chrono::DateTime<Utc>,
+    name: String,
+    address: std::net::SocketAddr,
 }

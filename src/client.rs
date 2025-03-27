@@ -3,7 +3,10 @@ use log::debug;
 use reqwest::header;
 use tokio::sync::mpsc::Sender;
 
-use crate::{AppError, Configuration, Event, ty::Folder};
+use crate::{
+    AppError, Configuration, Event,
+    ty::{Folder, PendingDevices},
+};
 
 const ADDR: &str = "http://localhost:8384/rest";
 
@@ -102,5 +105,19 @@ impl Client {
             .error_for_status()?;
 
         Ok(())
+    }
+
+    /// Get a list of all pending remote devices which have tried to connect but
+    /// aren't configured yet.
+    pub async fn get_pending_devices(&self) -> eyre::Result<PendingDevices, AppError> {
+        debug!("GET /cluster/pending/devices");
+        Ok(self
+            .client
+            .get(format!("{}/cluster/pending/devices", ADDR))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
     }
 }
