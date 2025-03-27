@@ -23,6 +23,15 @@ mod input;
 mod popup;
 mod ui;
 
+mod pages {
+    mod folders;
+    pub use folders::FoldersPage;
+    mod devices;
+    pub use devices::DevicesPage;
+    mod id;
+    pub use id::IDPage;
+}
+
 pub async fn start(client: Client) -> eyre::Result<()> {
     init_panic_hook();
 

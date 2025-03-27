@@ -1,15 +1,16 @@
-use qrcode::QrCode;
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style, Stylize},
+    style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph, Widget, Wrap},
 };
 use strum::IntoEnumIterator;
-use tui_qrcode::QrCodeWidget;
 
-use super::app::{App, CurrentScreen};
+use super::{
+    app::{App, CurrentScreen},
+    pages::{DevicesPage, FoldersPage, IDPage},
+};
 
 pub fn ui(frame: &mut Frame, app: &App) {
     // If we have an error, show only that
@@ -32,9 +33,11 @@ pub fn ui(frame: &mut Frame, app: &App) {
     let background = create_background(app);
     let inner_area = background.inner(frame.area());
     match app.current_screen {
-        CurrentScreen::Folders => folders_block(frame, app, inner_area),
-        CurrentScreen::Devices => devices_block(frame, app, inner_area),
-        CurrentScreen::ID => qr_code_block(frame, app, inner_area),
+        CurrentScreen::Folders => FoldersPage::new(app).render(inner_area, frame.buffer_mut()),
+        CurrentScreen::Devices => DevicesPage::new(app).render(inner_area, frame.buffer_mut()),
+        CurrentScreen::ID => {
+            IDPage::new(&app.state.lock().unwrap().id).render(inner_area, frame.buffer_mut())
+        }
     };
 
     frame.render_widget(background, frame.area());
@@ -42,115 +45,6 @@ pub fn ui(frame: &mut Frame, app: &App) {
     if let Some(popup) = &app.popup {
         popup.render(frame);
     }
-}
-
-/// Renders the folders page
-fn folders_block(frame: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(area);
-    let mut list_items = Vec::<ListItem>::new();
-
-    for (i, folder) in app.state.lock().unwrap().folders.iter().enumerate() {
-        list_items.push(ListItem::new(
-            Line::from(Span::raw(folder.label.clone())).bg(app.selected_folder.map_or(
-                Color::default(),
-                |highlighted_folder| {
-                    if highlighted_folder == i {
-                        Color::DarkGray
-                    } else {
-                        Color::default()
-                    }
-                },
-            )),
-        ));
-    }
-
-    let list = List::new(list_items);
-
-    frame.render_widget(list, chunks[0]);
-
-    if let Some(folder_index) = app.selected_folder {
-        let state = app.state.lock().unwrap();
-        if let Some(folder) = state.folders.get(folder_index) {
-            let block = Block::default()
-                .title_top(Line::from(format!("| {} |", folder.label)).centered())
-                .borders(Borders::ALL);
-            // Folder information
-            let mut folder_info = Vec::<ListItem>::new();
-            folder_info.push(ListItem::new(Line::from(format!("ID: {}", folder.id))));
-            folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
-            folder_info.push(ListItem::new(Line::from(format!(
-                "Shared with {} device{}",
-                folder.get_devices(&state).len(),
-                if folder.get_devices(&state).len() == 1 {
-                    ""
-                } else {
-                    "s"
-                }
-            ))));
-            for device in &folder.get_devices(&state) {
-                folder_info.push(ListItem::new(Line::from(device.name.clone())));
-            }
-            let inner_area = block.inner(chunks[1]);
-            frame.render_widget(block, chunks[1]);
-            let list = List::new(folder_info);
-            frame.render_widget(list, inner_area);
-        }
-    }
-}
-
-/// Renders the devices page
-fn devices_block(frame: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-        .split(area);
-
-    let mut devices_list = Vec::<ListItem>::new();
-
-    for (i, device) in app
-        .state
-        .lock()
-        .unwrap()
-        .get_other_devices()
-        .iter()
-        .enumerate()
-    {
-        devices_list.push(ListItem::new(
-            Line::from(Span::raw(device.name.clone())).bg(app.selected_device.map_or(
-                Color::default(),
-                |highlighted_device| {
-                    if highlighted_device == i {
-                        Color::DarkGray
-                    } else {
-                        Color::default()
-                    }
-                },
-            )),
-        ));
-    }
-
-    let list = List::new(devices_list);
-
-    frame.render_widget(list, chunks[0]);
-
-    if let Some(device_index) = app.selected_device {
-        if let Some(device) = app.state.lock().unwrap().get_devices().get(device_index) {
-            let block = Block::default()
-                .title_top(Line::from(format!("| {} |", device.name)).centered())
-                .borders(Borders::ALL);
-            frame.render_widget(block, chunks[1]);
-        }
-    }
-}
-
-fn qr_code_block(frame: &mut Frame, app: &App, area: Rect) {
-    let qr_code =
-        QrCode::new(app.state.lock().unwrap().id.clone()).expect("could not generate QR code");
-    let widget = QrCodeWidget::new(qr_code);
-    frame.render_widget(widget, area);
 }
 
 fn create_background(app: &App) -> Block {

@@ -276,20 +276,19 @@ impl App {
     fn update_devices(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Down => {
-                let len = self.state.lock().unwrap().devices.len();
+                let len = self.state.lock().unwrap().get_other_devices().len();
                 if len == 0 {
                     return None;
                 }
 
                 if let Some(highlighted_device) = self.selected_device {
-                    self.selected_device =
-                        Some((highlighted_device + 1) % self.state.lock().unwrap().devices.len())
+                    self.selected_device = Some((highlighted_device + 1) % len)
                 } else {
                     self.selected_device = Some(0)
                 }
             }
             Message::Up => {
-                let len = self.state.lock().unwrap().devices.len();
+                let len = self.state.lock().unwrap().get_other_devices().len();
                 if len == 0 {
                     return None;
                 }
