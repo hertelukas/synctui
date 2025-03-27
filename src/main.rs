@@ -1,6 +1,5 @@
 use clap::Parser;
 use color_eyre::eyre;
-use std::io::Write;
 use synctui::{AppConfig, Client, start};
 use tokio::{sync::mpsc, task};
 
@@ -27,17 +26,6 @@ fn setup_logging() {
     env_logger::Builder::new()
         .target(env_logger::Target::Pipe(target))
         .filter(None, log::LevelFilter::Debug)
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "[{} {} {}:{}] {}",
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
-                record.level(),
-                record.file().unwrap_or("unknown"),
-                record.line().unwrap_or(0),
-                record.args()
-            )
-        })
         .init();
 }
 

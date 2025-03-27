@@ -112,7 +112,7 @@ impl EventHandler {
                     match event {
                         CrosstermEvent::Key(key) => {
                             if key.kind == KeyEventKind::Press {
-                                debug!("Got key {key:?} - sending");
+                                debug!("got key {key:?} - sending");
                                 tx.send(Event::Key(key)).unwrap();
                             }
                         }

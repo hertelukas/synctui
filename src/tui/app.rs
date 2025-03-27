@@ -94,7 +94,7 @@ impl App {
         // Start listening to events
         tokio::spawn(async move {
             if let Err(e) = client.get_events(tx_event).await {
-                error!("Failed to get events: {:?}", e);
+                error!("failed to get events: {:?}", e);
                 *error_handle.lock().unwrap() = Some(e)
             };
         });
@@ -123,7 +123,7 @@ impl App {
                     state_handle.lock().unwrap().update_from_configuration(conf);
                 }
                 Err(e) => {
-                    error!("Failed to reload config: {:?}", e);
+                    error!("failed to reload config: {:?}", e);
                     *error_handle.lock().unwrap() = Some(e);
                 }
             }
@@ -144,7 +144,10 @@ impl App {
                 Ok(id) => {
                     state_handle.lock().unwrap().id = id;
                 }
-                Err(e) => *error_handle.lock().unwrap() = Some(e),
+                Err(e) => {
+                    error!("failed to load Syncthing ID: {:?}", e);
+                    *error_handle.lock().unwrap() = Some(e);
+                }
             }
 
             reload_tx.send(()).unwrap();
@@ -240,9 +243,11 @@ impl App {
         let error_handle = self.error.clone();
         tokio::spawn(async move {
             if let Err(e) = client.post_folder(folder).await {
-                *error_handle.lock().unwrap() = Some(e)
+                error!("failed to post new folder: {:?}", e);
+                *error_handle.lock().unwrap() = Some(e);
             }
             // TODO might make sense to reload the config here somehow
+            // - should be done if we receive the event that there is a new folder
             reload_tx.send(()).unwrap();
         });
         None
