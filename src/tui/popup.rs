@@ -134,6 +134,16 @@ enum NewFolderFocus {
     Label,
     Id,
     Device(usize),
+    SubmitButton,
+}
+
+impl NewFolderFocus {
+    fn is_input(&self) -> bool {
+        match self {
+            Self::Device(_) | Self::SubmitButton => false,
+            _ => true,
+        }
+    }
 }
 
 impl NewFolderPopup {
@@ -150,19 +160,25 @@ impl NewFolderPopup {
     }
 
     fn select_next(&mut self) {
+        let devices_len = self.state.lock().unwrap().get_other_devices().len();
         match self.focus {
             NewFolderFocus::Path => self.focus = NewFolderFocus::Label,
             NewFolderFocus::Label => self.focus = NewFolderFocus::Id,
             NewFolderFocus::Id => {
-                if self.state.lock().unwrap().get_other_devices().len() > 0 {
-                    self.focus = NewFolderFocus::Device(0)
+                if devices_len > 0 {
+                    self.focus = NewFolderFocus::Device(0);
+                } else {
+                    self.focus = NewFolderFocus::SubmitButton;
                 }
             }
             NewFolderFocus::Device(i) => {
-                self.focus = NewFolderFocus::Device(
-                    (i + 1).min(self.state.lock().unwrap().get_other_devices().len() - 1),
-                )
+                if i + 1 < devices_len {
+                    self.focus = NewFolderFocus::Device(i + 1);
+                } else {
+                    self.focus = NewFolderFocus::SubmitButton;
+                }
             }
+            _ => {}
         };
     }
 
@@ -177,8 +193,33 @@ impl NewFolderPopup {
                     self.focus = NewFolderFocus::Device(i - 1);
                 }
             }
+            NewFolderFocus::SubmitButton => {
+                let devices_len = self.state.lock().unwrap().get_other_devices().len();
+                if devices_len > 0 {
+                    self.focus = NewFolderFocus::Device(devices_len - 1);
+                } else {
+                    self.focus = NewFolderFocus::Id;
+                }
+            }
             _ => {}
         };
+    }
+    fn submit(&mut self) -> Option<Message> {
+        *self.mode.lock().unwrap() = CurrentMode::Normal;
+        let folder_devices: Vec<_> = {
+            let devices = &self.state.lock().unwrap().devices;
+            self.selected_devices
+                .iter()
+                .filter_map(|device_id| devices.get(device_id).map(|device| device.into()))
+                .collect()
+        };
+
+        return Some(Message::NewFolder(crate::ty::Folder::new(
+            self.id_input.text.clone(),
+            self.label_input.text.clone(),
+            self.path_input.text.clone(),
+            folder_devices,
+        )));
     }
 }
 
@@ -218,6 +259,7 @@ impl Popup for NewFolderPopup {
                 }
             }
             Message::Select => match self.focus {
+                NewFolderFocus::SubmitButton => return self.submit(),
                 NewFolderFocus::Device(i) => {
                     if let Some(device) = self.state.lock().unwrap().get_other_devices().get(i) {
                         if self.selected_devices.contains(&device.id) {
@@ -229,23 +271,7 @@ impl Popup for NewFolderPopup {
                 }
                 _ => self.select_next(),
             },
-            Message::Submit => {
-                *self.mode.lock().unwrap() = CurrentMode::Normal;
-                let folder_devices: Vec<_> = {
-                    let devices = &self.state.lock().unwrap().devices;
-                    self.selected_devices
-                        .iter()
-                        .filter_map(|device_id| devices.get(device_id).map(|device| device.into()))
-                        .collect()
-                };
-
-                return Some(Message::NewFolder(crate::ty::Folder::new(
-                    self.id_input.text.clone(),
-                    self.label_input.text.clone(),
-                    self.path_input.text.clone(),
-                    folder_devices,
-                )));
-            }
+            Message::Submit => return self.submit(),
             _ => {}
         };
         None
@@ -258,12 +284,13 @@ impl Popup for NewFolderPopup {
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
+            Constraint::Length(2),
             Constraint::Length(1),
         ]);
 
         let area = centered_rect(50, 50, frame.area());
         Clear.render(area, frame.buffer_mut());
-        let [_, path_area, label_area, id_area, devices_area] =
+        let [_, path_area, label_area, id_area, devices_area, submit_area] =
             vertical.areas(area.inner(Margin {
                 horizontal: 1,
                 vertical: 1,
@@ -318,6 +345,14 @@ impl Popup for NewFolderPopup {
 
         let devices_select = Paragraph::new(devices_line);
 
+        let submit = Paragraph::new(Span::styled(
+            "Submit",
+            match self.focus {
+                NewFolderFocus::SubmitButton => Style::default().bg(Color::DarkGray),
+                _ => Style::default(),
+            },
+        ));
+
         // Show cursors
         if *self.mode.lock().unwrap() == CurrentMode::Insert {
             let (cursor_area, index) = match self.focus {
@@ -326,7 +361,7 @@ impl Popup for NewFolderPopup {
                 NewFolderFocus::Label => (label_area, self.label_input.index),
                 _ => (area, 0),
             };
-            if !matches!(self.focus, NewFolderFocus::Device(_)) {
+            if self.focus.is_input() {
                 frame.set_cursor_position(Position::new(
                     cursor_area.x + index as u16 + 1,
                     cursor_area.y + 1,
@@ -339,5 +374,6 @@ impl Popup for NewFolderPopup {
         frame.render_widget(label_input, label_area);
         frame.render_widget(id_input, id_area);
         frame.render_widget(devices_select, devices_area);
+        frame.render_widget(submit, submit_area);
     }
 }
