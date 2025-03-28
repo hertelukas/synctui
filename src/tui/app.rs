@@ -102,7 +102,7 @@ impl App {
 
         // Start listening to events
         tokio::spawn(async move {
-            if let Err(e) = client.get_events(event_tx).await {
+            if let Err(e) = client.get_events(event_tx, true).await {
                 error!("failed to get events: {:?}", e);
                 *error_handle.lock().unwrap() = Some(e)
             };

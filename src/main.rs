@@ -49,7 +49,7 @@ async fn main() -> eyre::Result<()> {
         let (tx_event, mut rx_event) = mpsc::channel(1);
 
         task::spawn(async move {
-            if let Err(error) = client.get_events(tx_event).await {
+            if let Err(error) = client.get_events(tx_event, false).await {
                 println!("Error: {error:?}");
             }
         });

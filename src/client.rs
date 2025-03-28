@@ -73,7 +73,13 @@ impl Client {
 
     /// Only returns if an error is encountered.
     /// Transmits every new event over `tx`.
-    pub async fn get_events(&self, tx: Sender<Event>) -> eyre::Result<(), AppError> {
+    /// If `skip_old` is set, all events before the call to this function do not
+    /// result in a transmission.
+    pub async fn get_events(
+        &self,
+        tx: Sender<Event>,
+        mut skip_old: bool,
+    ) -> eyre::Result<(), AppError> {
         let mut current_id = 0;
         loop {
             debug!("GET /events");
@@ -89,8 +95,11 @@ impl Client {
             debug!("Received {} new events", events.len());
             for event in events {
                 current_id = event.id;
-                tx.send(event).await?;
+                if !skip_old {
+                    tx.send(event).await?;
+                }
             }
+            skip_old = true;
         }
     }
 
