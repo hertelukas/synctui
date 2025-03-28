@@ -1,7 +1,7 @@
-use input::EventHandler;
+use input::{EventHandler, Message};
 use log::debug;
 use std::io;
-use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::sync::mpsc::{self, Receiver};
 use ui::ui;
 
 use app::{App, CurrentMode};
@@ -40,7 +40,7 @@ pub async fn start(client: Client) -> eyre::Result<()> {
     let mut terminal = init_tui()?;
     terminal.clear()?;
 
-    let (reload_tx, reload_rx) = mpsc::unbounded_channel();
+    let (reload_tx, reload_rx) = mpsc::channel(10);
 
     let mut app = App::new(client, reload_tx);
     let _ = run(&mut terminal, &mut app, reload_rx).await;
@@ -78,7 +78,7 @@ fn restore_tui() -> io::Result<()> {
 async fn run<B: Backend>(
     terminal: &mut Terminal<B>,
     app: &mut App,
-    mut reload_rx: UnboundedReceiver<()>,
+    mut reload_rx: Receiver<Message>,
 ) -> Result<(), std::io::Error> {
     let (msg_tx, mut msg_rx) = mpsc::unbounded_channel();
 
@@ -105,7 +105,11 @@ async fn run<B: Backend>(
                     msg = app.update(m);
                 }
             },
-            _ = reload_rx.recv() => {}
+            mut msg = reload_rx.recv() => {
+                while let Some(m) = msg {
+                    msg = app.update(m);
+                }
+            }
         }
     }
     Ok(())

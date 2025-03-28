@@ -1,15 +1,15 @@
 use std::sync::{Arc, Mutex};
 
-use log::{debug, error};
+use log::{debug, error, warn};
 use state::State;
 use strum::IntoEnumIterator;
-use tokio::sync::mpsc::{self, Receiver, Sender, UnboundedSender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{AppError, Client, Event, ty::EventType};
 
 use super::{
     input::Message,
-    popup::{NewFolderPopup, Popup},
+    popup::{NewFolderPopup, PendingDevicePopup, Popup},
 };
 
 #[derive(Default, Debug, strum::EnumIter, PartialEq)]
@@ -55,7 +55,7 @@ impl TryFrom<u32> for CurrentScreen {
 #[derive(Debug)]
 pub struct App {
     pub client: Client,
-    rerender_tx: UnboundedSender<()>,
+    rerender_tx: Sender<Message>,
     reload_tx: Sender<Reload>,
     pub running: bool,
     pub current_screen: CurrentScreen,
@@ -76,7 +76,7 @@ pub enum Reload {
 }
 
 impl App {
-    pub fn new(client: Client, rerender_tx: UnboundedSender<()>) -> Self {
+    pub fn new(client: Client, rerender_tx: Sender<Message>) -> Self {
         let (reload_tx, reload_rx) = mpsc::channel(10);
         let app = App {
             client,
@@ -137,7 +137,7 @@ impl App {
         mut event_rx: Receiver<Event>,
         reload_tx: Sender<Reload>,
         error: Arc<Mutex<Option<AppError>>>,
-        _rerender_tx: UnboundedSender<()>,
+        rerender_tx: Sender<Message>,
     ) {
         while let Some(event) = event_rx.recv().await {
             debug!("Received event: {:?}", event);
@@ -151,7 +151,22 @@ impl App {
                         *error.lock().unwrap() = Some(e.into());
                     }
                 }
-                EventType::PendingDevicesChanged {} => {
+                EventType::PendingDevicesChanged {
+                    added: Some(ref added),
+                    ..
+                } => {
+                    if let Some(first) = added.first() {
+                        if let Err(e) = rerender_tx
+                            .send(Message::NewPendingDevice(first.clone()))
+                            .await
+                        {
+                            warn!(
+                                "failed to send rerender message with new popup about new pending device: {:?}",
+                                e
+                            );
+                            // Don't set an error, as this is not really mission critical
+                        }
+                    }
                     if let Err(e) = reload_tx.send(Reload::PendingDevices).await {
                         error!("failed to initiate pending devices reload due: {:?}", e);
                         *error.lock().unwrap() = Some(e.into());
@@ -169,7 +184,7 @@ impl App {
         mut reload_rx: Receiver<Reload>,
         client: Client,
         state: Arc<Mutex<State>>,
-        rerender_tx: UnboundedSender<()>,
+        rerender_tx: Sender<Message>,
         error: Arc<Mutex<Option<AppError>>>,
     ) {
         while let Some(reload) = reload_rx.recv().await {
@@ -186,7 +201,7 @@ impl App {
                         }
                     }
 
-                    rerender_tx.send(()).unwrap();
+                    rerender_tx.send(Message::None).await.unwrap();
                 }
                 Reload::ID => {
                     let id = client.get_id().await;
@@ -199,7 +214,7 @@ impl App {
                             *error.lock().unwrap() = Some(e);
                         }
                     }
-                    rerender_tx.send(()).unwrap();
+                    rerender_tx.send(Message::None).await.unwrap();
                 }
                 Reload::PendingDevices => {
                     let devices = client.get_pending_devices().await;
@@ -312,9 +327,7 @@ impl App {
                 error!("failed to post new folder: {:?}", e);
                 *error_handle.lock().unwrap() = Some(e);
             }
-            // TODO might make sense to reload the config here somehow
-            // - should be done if we receive the event that there is a new folder
-            reload_tx.send(()).unwrap();
+            reload_tx.send(Message::None).await.unwrap();
         });
         None
     }
@@ -359,6 +372,9 @@ impl App {
             Message::Reload => {
                 self.reload(Reload::Configuration);
             }
+            Message::NewPendingDevice(ref device) => {
+                self.popup = Some(Box::new(PendingDevicePopup::new(device.clone())));
+            }
             _ => {}
         }
 
@@ -374,7 +390,7 @@ impl App {
 pub mod state {
     use std::collections::HashMap;
 
-    use crate::{Configuration, Event};
+    use crate::{Configuration, Event, ty::PendingDevices};
 
     #[derive(Debug, Default)]
     pub struct State {
@@ -383,6 +399,7 @@ pub mod state {
         pub devices: HashMap<String, Device>,
         pub events: Vec<Event>,
         pub id: String,
+        pub pending: PendingDevices,
     }
 
     impl State {

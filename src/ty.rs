@@ -129,7 +129,10 @@ pub enum EventType {
     LocalChangeDetected {},
     LocalIndexUpdated {},
     LoginAttempt {},
-    PendingDevicesChanged {},
+    PendingDevicesChanged {
+        added: Option<Vec<AddedPendingDevice>>,
+        removed: Option<Vec<RemovedPendingDevice>>,
+    },
     PendingFoldersChanged {},
     RemoteChangeDetected {},
     RemoteDownloadProgress {},
@@ -153,11 +156,35 @@ pub enum ConnectionType {
     QuicServer,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+pub struct AddedPendingDevice {
+    pub address: std::net::SocketAddr,
+    #[serde(rename = "deviceID")]
+    pub device_id: String,
+    pub name: String,
+}
+
+impl std::fmt::Display for AddedPendingDevice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "\"{}\" ({} at {})",
+            self.name, self.device_id, self.address
+        ))
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct RemovedPendingDevice {
+    #[serde(rename = "deviceID")]
+    device_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct PendingDevices {
     #[serde(flatten)]
     devices: HashMap<String, PendingDevice>,
 }
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PendingDevice {
     time: chrono::DateTime<Utc>,

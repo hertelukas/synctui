@@ -120,4 +120,20 @@ impl Client {
             .json()
             .await?)
     }
+
+    /// Remove record about pending remote device with ID `device_id` which tried to connect.
+    /// This is not permanent, use [`ignore_device`] instead.
+    pub async fn delete_pending_device(&self, device_id: &str) -> eyre::Result<(), AppError> {
+        debug!("DELETE /cluster/pending/devices?device={device_id}");
+        self.client
+            .delete(format!(
+                "{}/cluster/pending/devices?device={}",
+                ADDR, device_id
+            ))
+            .send()
+            .await?
+            .error_for_status()?;
+
+        Ok(())
+    }
 }

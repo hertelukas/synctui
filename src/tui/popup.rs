@@ -11,6 +11,8 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
+use crate::ty::AddedPendingDevice;
+
 use super::{
     app::{CurrentMode, state::State},
     input::Message,
@@ -375,5 +377,41 @@ impl Popup for NewFolderPopup {
         frame.render_widget(id_input, id_area);
         frame.render_widget(devices_select, devices_area);
         frame.render_widget(submit, submit_area);
+    }
+}
+
+#[derive(Debug)]
+pub struct PendingDevicePopup {
+    device: AddedPendingDevice,
+}
+
+impl PendingDevicePopup {
+    pub fn new(device: AddedPendingDevice) -> Self {
+        Self { device }
+    }
+}
+
+impl Popup for PendingDevicePopup {
+    fn update(&mut self, msg: Message, _state: Arc<Mutex<State>>) -> Option<Message> {
+        match msg {
+            Message::Quit => return Some(Message::Quit),
+            _ => {}
+        };
+        None
+    }
+
+    fn render(&self, frame: &mut Frame) {
+        let block = self.create_popup_block("Pending Device".to_string());
+        let vertical = Layout::vertical([Constraint::Length(2)]);
+
+        let area = centered_rect(50, 50, frame.area());
+        Clear.render(area, frame.buffer_mut());
+        let [message_area] = vertical.areas(area.inner(Margin {
+            horizontal: 1,
+            vertical: 1,
+        }));
+        let line = Line::from(format!("Device {} wants to connect.", self.device));
+        frame.render_widget(block, area);
+        frame.render_widget(line, message_area);
     }
 }

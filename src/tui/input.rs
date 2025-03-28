@@ -6,6 +6,8 @@ use ratatui::crossterm::{
     event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind},
 };
 
+use crate::ty::AddedPendingDevice;
+
 use super::app::CurrentMode;
 
 #[derive(Debug, PartialEq)]
@@ -33,6 +35,7 @@ pub enum Message {
     Submit,
     // Popups
     NewFolder(crate::ty::Folder),
+    NewPendingDevice(AddedPendingDevice),
     None,
 }
 
