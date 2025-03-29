@@ -208,9 +208,17 @@ pub struct PendingDevices {
     devices: HashMap<String, PendingDevice>,
 }
 
+impl PendingDevices {
+    pub fn get_sorted(&self) -> Vec<(&String, &PendingDevice)> {
+        let res = self.devices.iter().collect();
+
+        res
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PendingDevice {
     time: chrono::DateTime<Utc>,
-    name: String,
+    pub name: String,
     address: std::net::SocketAddr,
 }

@@ -9,7 +9,7 @@ use strum::IntoEnumIterator;
 
 use super::{
     app::{App, CurrentScreen},
-    pages::{DevicesPage, FoldersPage, IDPage},
+    pages::{DevicesPage, FoldersPage, IDPage, PendingPage},
 };
 
 pub fn ui(frame: &mut Frame, app: &App) {
@@ -38,6 +38,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
         CurrentScreen::ID => {
             IDPage::new(&app.state.lock().unwrap().id).render(inner_area, frame.buffer_mut())
         }
+        CurrentScreen::Pending => PendingPage::new(app).render(inner_area, frame.buffer_mut()),
     };
 
     frame.render_widget(background, frame.area());

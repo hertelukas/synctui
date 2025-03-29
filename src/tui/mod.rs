@@ -31,6 +31,8 @@ mod pages {
     pub use devices::DevicesPage;
     mod id;
     pub use id::IDPage;
+    mod pending;
+    pub use pending::PendingPage;
 }
 
 pub async fn start(client: Client) -> eyre::Result<()> {

@@ -17,6 +17,7 @@ pub enum CurrentScreen {
     #[default]
     Folders,
     Devices,
+    Pending,
     ID,
 }
 
@@ -62,6 +63,7 @@ pub struct App {
     pub state: Arc<Mutex<State>>,
     pub selected_folder: Option<usize>,
     pub selected_device: Option<usize>,
+    pub selected_pending: Option<usize>,
     pub error: Arc<Mutex<Option<AppError>>>,
     pub mode: Arc<Mutex<CurrentMode>>,
     pub popup: Option<Box<dyn Popup>>,
@@ -87,6 +89,7 @@ impl App {
             state: Arc::new(Mutex::new(State::default())),
             selected_folder: None,
             selected_device: None,
+            selected_pending: None,
             error: Arc::new(Mutex::new(None)),
             mode: Arc::new(Mutex::new(CurrentMode::Normal)),
             popup: None,
@@ -153,19 +156,21 @@ impl App {
                 }
                 // TODO close popup if the pending device was removed
                 EventType::PendingDevicesChanged {
-                    added: Some(ref added),
-                    ..
+                    ref added,
+                    removed: _,
                 } => {
-                    if let Some(first) = added.first() {
-                        if let Err(e) = rerender_tx
-                            .send(Message::NewPendingDevice(first.clone()))
-                            .await
-                        {
-                            warn!(
-                                "failed to send rerender message with new popup about new pending device: {:?}",
-                                e
-                            );
-                            // Don't set an error, as this is not really mission critical
+                    if let Some(added) = added {
+                        if let Some(first) = added.first() {
+                            if let Err(e) = rerender_tx
+                                .send(Message::NewPendingDevice(first.clone()))
+                                .await
+                            {
+                                warn!(
+                                    "failed to send rerender message with new popup about new pending device: {:?}",
+                                    e
+                                );
+                                // Don't set an error, as this is not really mission critical
+                            }
                         }
                     }
                     if let Err(e) = reload_tx.send(Reload::PendingDevices).await {
@@ -219,7 +224,15 @@ impl App {
                 }
                 Reload::PendingDevices => {
                     let devices = client.get_pending_devices().await;
-                    debug!("pending devices: {:?}", devices);
+                    match devices {
+                        Ok(devices) => {
+                            state.lock().unwrap().pending_devices = devices;
+                        }
+                        Err(e) => {
+                            warn!("failed to reload pending devices: {:?}", e);
+                        }
+                    }
+                    rerender_tx.send(Message::None).await.unwrap();
                 }
                 _ => todo!("reloading {:?}", reload),
             }
@@ -275,9 +288,9 @@ impl App {
     }
 
     fn update_devices(&mut self, msg: Message) -> Option<Message> {
+        let len = self.state.lock().unwrap().get_other_devices().len();
         match msg {
             Message::Down => {
-                let len = self.state.lock().unwrap().get_other_devices().len();
                 if len == 0 {
                     return None;
                 }
@@ -289,7 +302,6 @@ impl App {
                 }
             }
             Message::Up => {
-                let len = self.state.lock().unwrap().get_other_devices().len();
                 if len == 0 {
                     return None;
                 }
@@ -297,6 +309,40 @@ impl App {
                     self.selected_device = Some((highlighted_device + len - 1) % len)
                 } else {
                     self.selected_device = Some(len - 1);
+                }
+            }
+            _ => {}
+        };
+        None
+    }
+
+    fn update_pending(&mut self, msg: Message) -> Option<Message> {
+        let len = self
+            .state
+            .lock()
+            .unwrap()
+            .pending_devices
+            .get_sorted()
+            .len();
+        match msg {
+            Message::Down => {
+                if len == 0 {
+                    return None;
+                }
+                if let Some(selected_pending) = self.selected_pending {
+                    self.selected_pending = Some((selected_pending + 1) % len)
+                } else {
+                    self.selected_pending = Some(0)
+                }
+            }
+            Message::Up => {
+                if len == 0 {
+                    return None;
+                }
+                if let Some(selected_pending) = self.selected_pending {
+                    self.selected_pending = Some((selected_pending + len - 1) % len)
+                } else {
+                    self.selected_pending = Some(len - 1);
                 }
             }
             _ => {}
@@ -411,6 +457,7 @@ impl App {
         match self.current_screen {
             CurrentScreen::Folders => self.update_folders(msg),
             CurrentScreen::Devices => self.update_devices(msg),
+            CurrentScreen::Pending => self.update_pending(msg),
             _ => None,
         }
     }
@@ -428,7 +475,7 @@ pub mod state {
         pub devices: HashMap<String, Device>,
         pub events: Vec<Event>,
         pub id: String,
-        pub pending: PendingDevices,
+        pub pending_devices: PendingDevices,
     }
 
     impl State {
