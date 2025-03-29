@@ -383,11 +383,42 @@ impl Popup for NewFolderPopup {
 #[derive(Debug)]
 pub struct PendingDevicePopup {
     device: AddedPendingDevice,
+    focus: PendingDeviceFocus,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+enum PendingDeviceFocus {
+    #[default]
+    Accept,
+    Ignore,
+    Dismiss,
 }
 
 impl PendingDevicePopup {
     pub fn new(device: AddedPendingDevice) -> Self {
-        Self { device }
+        Self {
+            device,
+            focus: PendingDeviceFocus::default(),
+        }
+    }
+
+    fn select_next(&mut self) {
+        match self.focus {
+            PendingDeviceFocus::Accept => self.focus = PendingDeviceFocus::Ignore,
+            PendingDeviceFocus::Ignore => self.focus = PendingDeviceFocus::Dismiss,
+            PendingDeviceFocus::Dismiss => {}
+        }
+    }
+
+    fn select_prev(&mut self) {
+        match self.focus {
+            PendingDeviceFocus::Accept => {}
+            PendingDeviceFocus::Ignore => self.focus = PendingDeviceFocus::Accept,
+            PendingDeviceFocus::Dismiss => self.focus = PendingDeviceFocus::Ignore,
+        }
+    }
+    fn submit(&self) -> Option<Message> {
+        None
     }
 }
 
@@ -395,6 +426,9 @@ impl Popup for PendingDevicePopup {
     fn update(&mut self, msg: Message, _state: Arc<Mutex<State>>) -> Option<Message> {
         match msg {
             Message::Quit => return Some(Message::Quit),
+            Message::FocusNext | Message::Right => self.select_next(),
+            Message::FocusBack | Message::Left => self.select_prev(),
+            Message::Select | Message::Submit => return self.submit(),
             _ => {}
         };
         None
@@ -402,16 +436,50 @@ impl Popup for PendingDevicePopup {
 
     fn render(&self, frame: &mut Frame) {
         let block = self.create_popup_block("Pending Device".to_string());
-        let vertical = Layout::vertical([Constraint::Length(2)]);
+        let vertical = Layout::vertical([Constraint::Length(2), Constraint::Length(1)]);
 
         let area = centered_rect(50, 50, frame.area());
         Clear.render(area, frame.buffer_mut());
-        let [message_area] = vertical.areas(area.inner(Margin {
+        let [message_area, buttons_area] = vertical.areas(area.inner(Margin {
             horizontal: 1,
             vertical: 1,
         }));
         let line = Line::from(format!("Device {} wants to connect.", self.device));
+
+        let selected_style = Style::new().bg(Color::DarkGray);
+
+        let buttons_line: Line = vec![
+            Span::styled(
+                "Accept",
+                if matches!(self.focus, PendingDeviceFocus::Accept) {
+                    selected_style
+                } else {
+                    Style::new()
+                },
+            ),
+            Span::raw(" "),
+            Span::styled(
+                "Ignore",
+                if matches!(self.focus, PendingDeviceFocus::Ignore) {
+                    selected_style
+                } else {
+                    Style::new()
+                },
+            ),
+            Span::raw(" "),
+            Span::styled(
+                "Dismiss",
+                if matches!(self.focus, PendingDeviceFocus::Dismiss) {
+                    selected_style
+                } else {
+                    Style::new()
+                },
+            ),
+        ]
+        .into();
+
         frame.render_widget(block, area);
         frame.render_widget(line, message_area);
+        frame.render_widget(buttons_line, buttons_area);
     }
 }

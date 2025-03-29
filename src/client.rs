@@ -99,7 +99,7 @@ impl Client {
                     tx.send(event).await?;
                 }
             }
-            skip_old = true;
+            skip_old = false;
         }
     }
 
