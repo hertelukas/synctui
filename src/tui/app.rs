@@ -151,6 +151,7 @@ impl App {
                         *error.lock().unwrap() = Some(e.into());
                     }
                 }
+                // TODO close popup if the pending device was removed
                 EventType::PendingDevicesChanged {
                     added: Some(ref added),
                     ..
@@ -340,6 +341,26 @@ impl App {
             Message::NewFolder(folder) => {
                 self.popup = None;
                 return self.handle_new_folder(folder);
+            }
+            Message::AcceptDevice(_) => {
+                self.popup = None;
+                todo!("add device to config");
+            }
+            Message::IgnoreDevice(_) => {
+                self.popup = None;
+                todo!("add device to ignore list");
+            }
+            Message::DismissDevice(ref device) => {
+                self.popup = None;
+                let client = self.client.clone();
+                let error_handle = self.error.clone();
+                let device = device.to_string();
+                tokio::spawn(async move {
+                    if let Err(e) = client.delete_pending_device(&device).await {
+                        error!("failed to delete pending device: {:?}", e);
+                        *error_handle.lock().unwrap() = Some(e);
+                    }
+                });
             }
             _ => {}
         }

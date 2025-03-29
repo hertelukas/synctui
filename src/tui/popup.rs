@@ -418,7 +418,17 @@ impl PendingDevicePopup {
         }
     }
     fn submit(&self) -> Option<Message> {
-        None
+        match self.focus {
+            PendingDeviceFocus::Accept => {
+                Some(Message::AcceptDevice(self.device.device_id.clone()))
+            }
+            PendingDeviceFocus::Ignore => {
+                Some(Message::IgnoreDevice(self.device.device_id.clone()))
+            }
+            PendingDeviceFocus::Dismiss => {
+                Some(Message::DismissDevice(self.device.device_id.clone()))
+            }
+        }
     }
 }
 

@@ -34,8 +34,13 @@ pub enum Message {
     Select,
     Submit,
     // Popups
+    // NewFolder
     NewFolder(crate::ty::Folder),
+    // PendingDevice
     NewPendingDevice(AddedPendingDevice),
+    AcceptDevice(String),
+    IgnoreDevice(String),
+    DismissDevice(String),
     None,
 }
 
