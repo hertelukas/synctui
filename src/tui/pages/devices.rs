@@ -1,8 +1,8 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Stylize},
-    text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Widget},
+    style::{Color, Style},
+    text::Line,
+    widgets::{Block, Borders, List, ListState, StatefulWidget, Widget},
 };
 
 use crate::tui::app::App;
@@ -22,6 +22,7 @@ impl Widget for DevicesPage<'_> {
         (&self).render(area, buf);
     }
 }
+
 impl Widget for &DevicesPage<'_> {
     fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
     where
@@ -32,33 +33,20 @@ impl Widget for &DevicesPage<'_> {
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(area);
 
-        let mut devices_list = Vec::<ListItem>::new();
-
-        for (i, device) in self
+        let list: Vec<_> = self
             .app
             .state
             .lock()
             .unwrap()
             .get_other_devices()
             .iter()
-            .enumerate()
-        {
-            devices_list.push(ListItem::new(
-                Line::from(Span::raw(device.name.clone())).bg(self.app.selected_device.map_or(
-                    Color::default(),
-                    |highlighted_device| {
-                        if highlighted_device == i {
-                            Color::DarkGray
-                        } else {
-                            Color::default()
-                        }
-                    },
-                )),
-            ));
-        }
+            .map(|d| d.name.clone())
+            .collect();
 
-        let list = List::new(devices_list);
-        list.render(chunks[0], buf);
+        let list = List::new(list).highlight_style(Style::new().bg(Color::DarkGray));
+        let mut list_state = ListState::default().with_selected(self.app.selected_device);
+
+        StatefulWidget::render(list, chunks[0], buf, &mut list_state);
 
         if let Some(device_index) = self.app.selected_device {
             if let Some(device) = self

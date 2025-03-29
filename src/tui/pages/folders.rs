@@ -1,8 +1,8 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Stylize},
-    text::{Line, Span},
-    widgets::{Block, Borders, List, ListItem, Widget},
+    style::{Color, Style},
+    text::Line,
+    widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget},
 };
 
 use crate::tui::app::App;
@@ -29,26 +29,22 @@ impl Widget for &FoldersPage<'_> {
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(area);
-        let mut list_items = Vec::<ListItem>::new();
 
-        for (i, folder) in self.app.state.lock().unwrap().folders.iter().enumerate() {
-            list_items.push(ListItem::new(
-                Line::from(Span::raw(folder.label.clone())).bg(self.app.selected_folder.map_or(
-                    Color::default(),
-                    |highlighted_folder| {
-                        if highlighted_folder == i {
-                            Color::DarkGray
-                        } else {
-                            Color::default()
-                        }
-                    },
-                )),
-            ));
-        }
+        let list_items: Vec<_> = self
+            .app
+            .state
+            .lock()
+            .unwrap()
+            .folders
+            .iter()
+            .map(|f| f.label.clone())
+            .collect();
 
-        let list = List::new(list_items);
+        let list = List::new(list_items).highlight_style(Style::new().bg(Color::DarkGray));
 
-        list.render(chunks[0], buf);
+        let mut list_state = ListState::default().with_selected(self.app.selected_folder);
+
+        StatefulWidget::render(list, chunks[0], buf, &mut list_state);
 
         if let Some(folder_index) = self.app.selected_folder {
             let state = self.app.state.lock().unwrap();
@@ -75,7 +71,7 @@ impl Widget for &FoldersPage<'_> {
                 let inner_area = block.inner(chunks[1]);
                 block.render(chunks[1], buf);
                 let list = List::new(folder_info);
-                list.render(inner_area, buf);
+                Widget::render(list, inner_area, buf);
             }
         }
     }

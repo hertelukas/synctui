@@ -42,11 +42,10 @@ impl Widget for &PendingPage<'_> {
             .collect();
 
         let list = List::new(list)
-            .block(Block::default().title(Span::styled("Devices", Style::new().bold())))
+            .block(Block::default().title(Span::styled("Pending Devices", Style::new().bold())))
             .highlight_style(Style::new().bg(Color::DarkGray));
 
-        let mut devices_list_state = ListState::default();
-        devices_list_state.select(self.app.selected_pending);
+        let mut devices_list_state = ListState::default().with_selected(self.app.selected_pending);
 
         StatefulWidget::render(list, area, buf, &mut devices_list_state);
     }
