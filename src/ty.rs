@@ -175,6 +175,16 @@ pub struct AddedPendingDevice {
     pub name: String,
 }
 
+impl AddedPendingDevice {
+    pub fn from_pending_device(id: &str, device: &PendingDevice) -> Self {
+        Self {
+            address: device.address,
+            device_id: id.to_string(),
+            name: device.name.clone(),
+        }
+    }
+}
+
 impl Into<Device> for AddedPendingDevice {
     fn into(self) -> Device {
         Device {

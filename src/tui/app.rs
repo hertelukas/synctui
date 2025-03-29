@@ -5,7 +5,10 @@ use state::State;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
-use crate::{AppError, Client, Event, ty::EventType};
+use crate::{
+    AppError, Client, Event,
+    ty::{AddedPendingDevice, EventType},
+};
 
 use super::{
     input::Message,
@@ -343,6 +346,22 @@ impl App {
                     self.selected_pending = Some((selected_pending + len - 1) % len)
                 } else {
                     self.selected_pending = Some(len - 1);
+                }
+            }
+            Message::Select => {
+                if let Some(index) = self.selected_pending {
+                    if let Some((id, device)) = self
+                        .state
+                        .lock()
+                        .unwrap()
+                        .pending_devices
+                        .get_sorted()
+                        .get(index)
+                    {
+                        self.popup = Some(Box::new(PendingDevicePopup::new(
+                            AddedPendingDevice::from_pending_device(&id, device),
+                        )))
+                    }
                 }
             }
             _ => {}
