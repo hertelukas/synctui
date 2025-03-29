@@ -20,6 +20,7 @@ impl Client {
     /// Creates a new HTTP client, with which the syncthing API can be used.
     /// The API can either be generated in the GUI of syncthing or set
     /// in the configuration file under `configuration/gui/apikey`.
+    #[must_use]
     pub fn new(api_key: &str) -> eyre::Result<Self> {
         let mut headers = header::HeaderMap::new();
         let mut api_key_header = header::HeaderValue::from_str(api_key)?;
@@ -33,6 +34,7 @@ impl Client {
     }
 
     /// Returns the syncthing ID of the local device
+    #[must_use]
     pub async fn get_id(&self) -> eyre::Result<String, AppError> {
         debug!("GET /ping for ID");
         Ok(self
@@ -48,6 +50,7 @@ impl Client {
             .to_string())
     }
 
+    #[must_use]
     pub async fn ping(&self) -> eyre::Result<()> {
         debug!("GET /ping");
         self.client
@@ -59,6 +62,7 @@ impl Client {
     }
 
     /// GET the entire config
+    #[must_use]
     pub async fn get_configuration(&self) -> eyre::Result<Configuration, AppError> {
         debug!("GET /config");
         Ok(self
@@ -75,6 +79,7 @@ impl Client {
     /// Transmits every new event over `tx`.
     /// If `skip_old` is set, all events before the call to this function do not
     /// result in a transmission.
+    #[must_use]
     pub async fn get_events(
         &self,
         tx: Sender<Event>,
@@ -104,6 +109,7 @@ impl Client {
     }
 
     /// Creates a new folder, or updates it, if it already exists.
+    #[must_use]
     pub async fn post_folder(&self, folder: Folder) -> eyre::Result<(), AppError> {
         debug!("POST /config/folders {:#?}", folder);
         self.client
@@ -118,6 +124,7 @@ impl Client {
 
     /// Get a list of all pending remote devices which have tried to connect but
     /// aren't configured yet.
+    #[must_use]
     pub async fn get_pending_devices(&self) -> eyre::Result<PendingDevices, AppError> {
         debug!("GET /cluster/pending/devices");
         Ok(self
@@ -132,6 +139,7 @@ impl Client {
 
     /// Remove record about pending remote device with ID `device_id` which tried to connect.
     /// This is not permanent, use [`ignore_device`] instead.
+    #[must_use]
     pub async fn delete_pending_device(&self, device_id: &str) -> eyre::Result<(), AppError> {
         debug!("DELETE /cluster/pending/devices?device={device_id}");
         self.client
