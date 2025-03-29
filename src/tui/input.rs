@@ -38,7 +38,7 @@ pub enum Message {
     NewFolder(crate::ty::Folder),
     // PendingDevice
     NewPendingDevice(AddedPendingDevice),
-    AcceptDevice(String),
+    AcceptDevice(AddedPendingDevice),
     IgnoreDevice(String),
     DismissDevice(String),
     None,

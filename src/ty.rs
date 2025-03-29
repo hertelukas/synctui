@@ -77,6 +77,17 @@ pub struct Device {
     #[serde(rename = "deviceID")]
     pub device_id: String,
     pub name: String,
+    pub addresses: Vec<String>, // TODO parse as SocketAddr or "dynamic"
+    compression: Compression,
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+enum Compression {
+    #[default]
+    Metadata,
+    Always,
+    Never,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -162,6 +173,18 @@ pub struct AddedPendingDevice {
     #[serde(rename = "deviceID")]
     pub device_id: String,
     pub name: String,
+}
+
+impl Into<Device> for AddedPendingDevice {
+    fn into(self) -> Device {
+        Device {
+            device_id: self.device_id,
+            name: self.name,
+            // TODO
+            addresses: vec!["dynamic".to_string()],
+            compression: Compression::default(),
+        }
+    }
 }
 
 impl std::fmt::Display for AddedPendingDevice {

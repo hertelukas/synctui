@@ -342,9 +342,17 @@ impl App {
                 self.popup = None;
                 return self.handle_new_folder(folder);
             }
-            Message::AcceptDevice(_) => {
+            Message::AcceptDevice(ref device) => {
                 self.popup = None;
-                todo!("add device to config");
+                let client = self.client.clone();
+                let error_handle = self.error.clone();
+                let device = device.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = client.add_device(device.into()).await {
+                        error!("failed to add new device: {:?}", e);
+                        *error_handle.lock().unwrap() = Some(e);
+                    }
+                });
             }
             Message::IgnoreDevice(_) => {
                 self.popup = None;

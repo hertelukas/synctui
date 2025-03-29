@@ -5,7 +5,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::{
     AppError, Configuration, Event,
-    ty::{Folder, PendingDevices},
+    ty::{Device, Folder, PendingDevices},
 };
 
 const ADDR: &str = "http://localhost:8384/rest";
@@ -147,6 +147,20 @@ impl Client {
                 "{}/cluster/pending/devices?device={}",
                 ADDR, device_id
             ))
+            .send()
+            .await?
+            .error_for_status()?;
+
+        Ok(())
+    }
+
+    #[must_use]
+    pub async fn add_device(&self, device: Device) -> eyre::Result<(), AppError> {
+        debug!("POST /rest/config/devices");
+        debug!("{:?}", device);
+        self.client
+            .post(format!("{}/config/devices", ADDR))
+            .json(&device)
             .send()
             .await?
             .error_for_status()?;
