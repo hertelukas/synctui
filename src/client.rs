@@ -5,7 +5,7 @@ use tokio::sync::mpsc::Sender;
 
 use crate::{
     AppError, Configuration, Event,
-    ty::{Device, Folder, PendingDevices},
+    ty::{Device, Folder, PendingDevices, PendingFolders},
 };
 
 const ADDR: &str = "http://localhost:8384/rest";
@@ -130,6 +130,21 @@ impl Client {
         Ok(self
             .client
             .get(format!("{}/cluster/pending/devices", ADDR))
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?)
+    }
+
+    /// Folders which remote devices have offered to us, but are not yet shared from our
+    /// instance to them.
+    #[must_use]
+    pub async fn get_pending_folders(&self) -> eyre::Result<PendingFolders, AppError> {
+        debug!("GET /cluster/pending/folders");
+        Ok(self
+            .client
+            .get(format!("{}/cluster/pending/folders", ADDR))
             .send()
             .await?
             .error_for_status()?

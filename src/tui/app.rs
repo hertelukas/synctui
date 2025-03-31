@@ -133,6 +133,7 @@ impl App {
         app.reload(Reload::ID);
         app.reload(Reload::Configuration);
         app.reload(Reload::PendingDevices);
+        app.reload(Reload::PendingFolders);
 
         app
     }
@@ -177,7 +178,16 @@ impl App {
                         }
                     }
                     if let Err(e) = reload_tx.send(Reload::PendingDevices).await {
-                        error!("failed to initiate pending devices reload due: {:?}", e);
+                        error!("failed to initiate pending devices reload: {:?}", e);
+                        *error.lock().unwrap() = Some(e.into());
+                    }
+                }
+                EventType::PendingFoldersChanged {
+                    added: _,
+                    removed: _,
+                } => {
+                    if let Err(e) = reload_tx.send(Reload::PendingFolders).await {
+                        error!("failed to initiate pending devices reload: {:?}", e);
                         *error.lock().unwrap() = Some(e.into());
                     }
                 }
@@ -228,16 +238,18 @@ impl App {
                 Reload::PendingDevices => {
                     let devices = client.get_pending_devices().await;
                     match devices {
-                        Ok(devices) => {
-                            state.lock().unwrap().pending_devices = devices;
-                        }
-                        Err(e) => {
-                            warn!("failed to reload pending devices: {:?}", e);
-                        }
+                        Ok(devices) => state.lock().unwrap().pending_devices = devices,
+                        Err(e) => warn!("failed to reload pending devices: {:?}", e),
                     }
                     rerender_tx.send(Message::None).await.unwrap();
                 }
-                _ => todo!("reloading {:?}", reload),
+                Reload::PendingFolders => {
+                    let folders = client.get_pending_folders().await;
+                    match folders {
+                        Ok(folders) => state.lock().unwrap().pending_folders = folders,
+                        Err(e) => warn!("failed to reload pending folders: {:?}", e),
+                    }
+                }
             }
         }
     }
@@ -485,7 +497,10 @@ impl App {
 pub mod state {
     use std::collections::HashMap;
 
-    use crate::{Configuration, Event, ty::PendingDevices};
+    use crate::{
+        Configuration, Event,
+        ty::{PendingDevices, PendingFolders},
+    };
 
     #[derive(Debug, Default)]
     pub struct State {
@@ -495,6 +510,7 @@ pub mod state {
         pub events: Vec<Event>,
         pub id: String,
         pub pending_devices: PendingDevices,
+        pub pending_folders: PendingFolders,
     }
 
     impl State {

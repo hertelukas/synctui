@@ -144,7 +144,10 @@ pub enum EventType {
         added: Option<Vec<AddedPendingDevice>>,
         removed: Option<Vec<RemovedPendingDevice>>,
     },
-    PendingFoldersChanged {},
+    PendingFoldersChanged {
+        added: Option<Vec<AddedPendingFolder>>,
+        removed: Option<Vec<RemovedPendingFolder>>,
+    },
     RemoteChangeDetected {},
     RemoteDownloadProgress {},
     RemoteIndexUpdated {},
@@ -219,9 +222,9 @@ pub struct PendingDevices {
 }
 
 impl PendingDevices {
+    // TODO sort
     pub fn get_sorted(&self) -> Vec<(&String, &PendingDevice)> {
         let res = self.devices.iter().collect();
-
         res
     }
 }
@@ -231,4 +234,56 @@ pub struct PendingDevice {
     time: chrono::DateTime<Utc>,
     pub name: String,
     address: std::net::SocketAddr,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AddedPendingFolder {
+    #[serde(rename = "deviceID")]
+    device_id: String,
+    #[serde(rename = "folderID")]
+    folder_id: String,
+    folder_label: String,
+    receive_encrypted: bool,
+    remote_encrypted: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct RemovedPendingFolder {
+    /// A removed entry without `device_id`, means that the folder is
+    /// no longer pending on any device.
+    #[serde(rename = "deviceID")]
+    device_id: Option<String>,
+    #[serde(rename = "folderID")]
+    folder_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct PendingFolders {
+    #[serde(flatten)]
+    folders: HashMap<String, PendingFolder>,
+}
+
+impl PendingFolders {
+    // TODO sort
+    pub fn get_sorted(&self) -> Vec<(&String, &PendingFolder)> {
+        let res = self.folders.iter().collect();
+        res
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingFolder {
+    /// Maps deviceID to the information about that folder on that device
+    pub offered_by: HashMap<String, PendingFolderOfferer>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingFolderOfferer {
+    time: chrono::DateTime<Utc>,
+    pub label: String,
+    receive_encrypted: bool,
+    remote_encrypted: bool,
 }
