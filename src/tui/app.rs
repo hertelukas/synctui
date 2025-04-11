@@ -12,6 +12,7 @@ use crate::{
 
 use super::{
     input::Message,
+    pages::PendingPageState,
     popup::{NewFolderPopup, PendingDevicePopup, Popup},
 };
 
@@ -66,7 +67,7 @@ pub struct App {
     pub state: Arc<Mutex<State>>,
     pub selected_folder: Option<usize>,
     pub selected_device: Option<usize>,
-    pub selected_pending: Option<usize>,
+    pub pending_state: PendingPageState,
     pub error: Arc<Mutex<Option<AppError>>>,
     pub mode: Arc<Mutex<CurrentMode>>,
     pub popup: Option<Box<dyn Popup>>,
@@ -92,7 +93,7 @@ impl App {
             state: Arc::new(Mutex::new(State::default())),
             selected_folder: None,
             selected_device: None,
-            selected_pending: None,
+            pending_state: PendingPageState::default(),
             error: Arc::new(Mutex::new(None)),
             mode: Arc::new(Mutex::new(CurrentMode::Normal)),
             popup: None,
@@ -332,51 +333,38 @@ impl App {
     }
 
     fn update_pending(&mut self, msg: Message) -> Option<Message> {
-        let len = self
+        let devices_len = self
             .state
             .lock()
             .unwrap()
             .pending_devices
             .get_sorted()
             .len();
-        match msg {
-            Message::Down => {
-                if len == 0 {
-                    return None;
-                }
-                if let Some(selected_pending) = self.selected_pending {
-                    self.selected_pending = Some((selected_pending + 1) % len)
-                } else {
-                    self.selected_pending = Some(0)
-                }
-            }
-            Message::Up => {
-                if len == 0 {
-                    return None;
-                }
-                if let Some(selected_pending) = self.selected_pending {
-                    self.selected_pending = Some((selected_pending + len - 1) % len)
-                } else {
-                    self.selected_pending = Some(len - 1);
-                }
-            }
-            Message::Select => {
-                if let Some(index) = self.selected_pending {
-                    if let Some((id, device)) = self
-                        .state
-                        .lock()
-                        .unwrap()
-                        .pending_devices
-                        .get_sorted()
-                        .get(index)
-                    {
-                        self.popup = Some(Box::new(PendingDevicePopup::new(
-                            AddedPendingDevice::from_pending_device(&id, device),
-                        )))
-                    }
-                }
-            }
-            _ => {}
+
+        let folders_len = self
+            .state
+            .lock()
+            .unwrap()
+            .pending_folders
+            .get_sorted()
+            .len();
+
+        self.pending_state.update(&msg, devices_len, folders_len);
+        if matches!(msg, Message::Select) {
+            if let Some(index) = self.pending_state.device_selected() {
+                if let Some((id, device)) = self
+                    .state
+                    .lock()
+                    .unwrap()
+                    .pending_devices
+                    .get_sorted()
+                    .get(index)
+                {
+                    self.popup = Some(Box::new(PendingDevicePopup::new(
+                        AddedPendingDevice::from_pending_device(&id, device),
+                    )))
+                };
+            };
         };
         None
     }

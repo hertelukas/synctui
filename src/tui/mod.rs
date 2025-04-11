@@ -33,6 +33,7 @@ mod pages {
     pub use id::IDPage;
     mod pending;
     pub use pending::PendingPage;
+    pub use pending::PendingPageState;
 }
 
 pub async fn start(client: Client) -> eyre::Result<()> {
