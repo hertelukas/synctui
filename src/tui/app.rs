@@ -7,7 +7,7 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
     AppError, Client, Event,
-    ty::{AddedPendingDevice, EventType},
+    ty::{AddedPendingDevice, AddedPendingFolder, EventType},
 };
 
 use super::{
@@ -365,6 +365,7 @@ impl App {
 
         self.pending_state.update(&msg, devices_len, folders_len);
         if matches!(msg, Message::Select) {
+            // Device Popup
             if let Some(index) = self.pending_state.device_selected() {
                 if let Some((id, device)) = self
                     .state
@@ -379,6 +380,24 @@ impl App {
                     )))
                 };
             };
+            // Folder Popup
+            if let Some(index) = self.pending_state.folder_selected() {
+                let state_handle = self.state.lock().unwrap();
+                if let Some((folder_id, device_id, folder)) =
+                    state_handle.pending_folders.get_sorted().get(index)
+                {
+                    // Only need to share
+                    if state_handle.folders.iter().any(|f| f.id == **folder_id) {
+                        self.popup = Some(Box::new(PendingShareFolderPopup::new(
+                            AddedPendingFolder::from_pending_folder_offerer(
+                                folder_id, folder, device_id,
+                            ),
+                        )))
+                    } else {
+                        unimplemented!("new folder sharing");
+                    }
+                }
+            }
         };
         None
     }

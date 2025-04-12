@@ -158,24 +158,17 @@ impl Widget for &PendingPage<'_> {
                 .pending_folders
                 .get_sorted()
                 .iter()
-                .map(|(folder_id, folder)| {
-                    folder
-                        .offered_by
-                        .iter()
-                        .map(|(device_id, folder)| {
-                            let device_name = if let Some(device) = state.devices.get(device_id) {
-                                device.name.clone()
-                            } else {
-                                "Unknown device".to_string()
-                            };
-                            Line::from(format!(
-                                "\"{}\" ({}) - {}",
-                                folder.label, folder_id, device_name
-                            ))
-                        })
-                        .collect::<Vec<_>>()
+                .map(|(folder_id, device_id, folder)| {
+                    let device_name = if let Some(device) = state.devices.get(*device_id) {
+                        device.name.clone()
+                    } else {
+                        "Unknown device".to_string()
+                    };
+                    Line::from(format!(
+                        "\"{}\" ({}) - {}",
+                        folder.label, folder_id, device_name
+                    ))
                 })
-                .flatten()
                 .collect()
         };
         let folders_list = List::new(folders_list)

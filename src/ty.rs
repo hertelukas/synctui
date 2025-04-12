@@ -248,6 +248,22 @@ pub struct AddedPendingFolder {
     remote_encrypted: bool,
 }
 
+impl AddedPendingFolder {
+    pub fn from_pending_folder_offerer(
+        folder_id: &str,
+        folder: &PendingFolderOfferer,
+        device_id: &str,
+    ) -> Self {
+        Self {
+            device_id: device_id.to_string(),
+            folder_id: folder_id.to_string(),
+            folder_label: folder.label.clone(),
+            receive_encrypted: folder.receive_encrypted,
+            remote_encrypted: folder.remote_encrypted,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct RemovedPendingFolder {
     /// A removed entry without `device_id`, means that the folder is
@@ -266,8 +282,19 @@ pub struct PendingFolders {
 
 impl PendingFolders {
     // TODO sort
-    pub fn get_sorted(&self) -> Vec<(&String, &PendingFolder)> {
-        let res = self.folders.iter().collect();
+    pub fn get_sorted(&self) -> Vec<(&String, &String, &PendingFolderOfferer)> {
+        let res = self
+            .folders
+            .iter()
+            .map(|(folder_id, pending_folder)| {
+                pending_folder
+                    .offered_by
+                    .iter()
+                    .map(|(device_id, pendig_folder)| (folder_id, device_id, pendig_folder))
+                    .collect::<Vec<_>>()
+            })
+            .flatten()
+            .collect();
         res
     }
 }
