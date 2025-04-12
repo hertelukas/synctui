@@ -6,7 +6,7 @@ use ratatui::crossterm::{
     event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind},
 };
 
-use crate::ty::AddedPendingDevice;
+use crate::ty::{AddedPendingDevice, AddedPendingFolder};
 
 use super::app::CurrentMode;
 
@@ -41,6 +41,8 @@ pub enum Message {
     AcceptDevice(AddedPendingDevice),
     IgnoreDevice(String),
     DismissDevice(String),
+    // PendingFolder
+    NewPendingFolder(AddedPendingFolder),
     None,
 }
 

@@ -13,7 +13,7 @@ use crate::{
 use super::{
     input::Message,
     pages::PendingPageState,
-    popup::{NewFolderPopup, PendingDevicePopup, Popup},
+    popup::{NewFolderPopup, PendingDevicePopup, PendingShareFolderPopup, Popup},
 };
 
 #[derive(Default, Debug, strum::EnumIter, PartialEq)]
@@ -184,9 +184,22 @@ impl App {
                     }
                 }
                 EventType::PendingFoldersChanged {
-                    added: _,
+                    ref added,
                     removed: _,
                 } => {
+                    if let Some(added) = added {
+                        if let Some(first) = added.first() {
+                            if let Err(e) = rerender_tx
+                                .send(Message::NewPendingFolder(first.clone()))
+                                .await
+                            {
+                                warn!(
+                                    "failed to send rerender message with new popup about new pending folder-share: {:?}",
+                                    e
+                                );
+                            }
+                        }
+                    }
                     if let Err(e) = reload_tx.send(Reload::PendingFolders).await {
                         error!("failed to initiate pending devices reload: {:?}", e);
                         *error.lock().unwrap() = Some(e.into());
@@ -468,6 +481,21 @@ impl App {
             }
             Message::NewPendingDevice(ref device) => {
                 self.popup = Some(Box::new(PendingDevicePopup::new(device.clone())));
+            }
+            Message::NewPendingFolder(ref folder) => {
+                // Folder already exists on our machine, just share
+                if self
+                    .state
+                    .lock()
+                    .unwrap()
+                    .folders
+                    .iter()
+                    .any(|f| f.id == folder.folder_id)
+                {
+                    self.popup = Some(Box::new(PendingShareFolderPopup::new(folder.clone())))
+                } else {
+                    unimplemented!("handle new folder")
+                }
             }
             _ => {}
         }

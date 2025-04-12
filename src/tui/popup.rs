@@ -11,7 +11,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
-use crate::ty::AddedPendingDevice;
+use crate::ty::{AddedPendingDevice, AddedPendingFolder};
 
 use super::{
     app::{CurrentMode, state::State},
@@ -383,49 +383,48 @@ impl Popup for NewFolderPopup {
 #[derive(Debug)]
 pub struct PendingDevicePopup {
     device: AddedPendingDevice,
-    focus: PendingDeviceFocus,
+    focus: PendingFocus,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
-enum PendingDeviceFocus {
+enum PendingFocus {
     #[default]
     Accept,
     Ignore,
     Dismiss,
 }
 
+impl PendingFocus {
+    fn next(&mut self) {
+        match self {
+            PendingFocus::Accept => *self = PendingFocus::Ignore,
+            PendingFocus::Ignore => *self = PendingFocus::Dismiss,
+            PendingFocus::Dismiss => {}
+        }
+    }
+
+    fn prev(&mut self) {
+        match self {
+            PendingFocus::Accept => {}
+            PendingFocus::Ignore => *self = PendingFocus::Accept,
+            PendingFocus::Dismiss => *self = PendingFocus::Ignore,
+        }
+    }
+}
+
 impl PendingDevicePopup {
     pub fn new(device: AddedPendingDevice) -> Self {
         Self {
             device,
-            focus: PendingDeviceFocus::default(),
+            focus: PendingFocus::default(),
         }
     }
 
-    fn select_next(&mut self) {
-        match self.focus {
-            PendingDeviceFocus::Accept => self.focus = PendingDeviceFocus::Ignore,
-            PendingDeviceFocus::Ignore => self.focus = PendingDeviceFocus::Dismiss,
-            PendingDeviceFocus::Dismiss => {}
-        }
-    }
-
-    fn select_prev(&mut self) {
-        match self.focus {
-            PendingDeviceFocus::Accept => {}
-            PendingDeviceFocus::Ignore => self.focus = PendingDeviceFocus::Accept,
-            PendingDeviceFocus::Dismiss => self.focus = PendingDeviceFocus::Ignore,
-        }
-    }
     fn submit(&self) -> Option<Message> {
         match self.focus {
-            PendingDeviceFocus::Accept => Some(Message::AcceptDevice(self.device.clone())),
-            PendingDeviceFocus::Ignore => {
-                Some(Message::IgnoreDevice(self.device.device_id.clone()))
-            }
-            PendingDeviceFocus::Dismiss => {
-                Some(Message::DismissDevice(self.device.device_id.clone()))
-            }
+            PendingFocus::Accept => Some(Message::AcceptDevice(self.device.clone())),
+            PendingFocus::Ignore => Some(Message::IgnoreDevice(self.device.device_id.clone())),
+            PendingFocus::Dismiss => Some(Message::DismissDevice(self.device.device_id.clone())),
         }
     }
 }
@@ -434,8 +433,8 @@ impl Popup for PendingDevicePopup {
     fn update(&mut self, msg: Message, _state: Arc<Mutex<State>>) -> Option<Message> {
         match msg {
             Message::Quit => return Some(Message::Quit),
-            Message::FocusNext | Message::Right => self.select_next(),
-            Message::FocusBack | Message::Left => self.select_prev(),
+            Message::FocusNext | Message::Right => self.focus.next(),
+            Message::FocusBack | Message::Left => self.focus.prev(),
             Message::Select | Message::Submit => return self.submit(),
             _ => {}
         };
@@ -459,7 +458,7 @@ impl Popup for PendingDevicePopup {
         let buttons_line: Line = vec![
             Span::styled(
                 "Accept",
-                if matches!(self.focus, PendingDeviceFocus::Accept) {
+                if matches!(self.focus, PendingFocus::Accept) {
                     selected_style
                 } else {
                     Style::new()
@@ -468,7 +467,7 @@ impl Popup for PendingDevicePopup {
             Span::raw(" "),
             Span::styled(
                 "Ignore",
-                if matches!(self.focus, PendingDeviceFocus::Ignore) {
+                if matches!(self.focus, PendingFocus::Ignore) {
                     selected_style
                 } else {
                     Style::new()
@@ -477,7 +476,106 @@ impl Popup for PendingDevicePopup {
             Span::raw(" "),
             Span::styled(
                 "Dismiss",
-                if matches!(self.focus, PendingDeviceFocus::Dismiss) {
+                if matches!(self.focus, PendingFocus::Dismiss) {
+                    selected_style
+                } else {
+                    Style::new()
+                },
+            ),
+        ]
+        .into();
+
+        frame.render_widget(block, area);
+        frame.render_widget(line, message_area);
+        frame.render_widget(buttons_line, buttons_area);
+    }
+}
+
+#[derive(Debug)]
+pub struct PendingAddFolderPopup {}
+
+impl PendingAddFolderPopup {}
+
+impl Popup for PendingAddFolderPopup {
+    fn update(&mut self, _msg: Message, _state: Arc<Mutex<State>>) -> Option<Message> {
+        todo!()
+    }
+
+    fn render(&self, _frame: &mut Frame) {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct PendingShareFolderPopup {
+    folder: AddedPendingFolder,
+    focus: PendingFocus,
+}
+
+impl PendingShareFolderPopup {
+    pub fn new(folder: AddedPendingFolder) -> Self {
+        Self {
+            folder,
+            focus: PendingFocus::default(),
+        }
+    }
+
+    fn submit(&self) -> Option<Message> {
+        todo!()
+    }
+}
+
+impl Popup for PendingShareFolderPopup {
+    fn update(&mut self, msg: Message, _state: Arc<Mutex<State>>) -> Option<Message> {
+        match msg {
+            Message::Quit => return Some(Message::Quit),
+            Message::FocusNext | Message::Right => self.focus.next(),
+            Message::FocusBack | Message::Left => self.focus.prev(),
+            Message::Select | Message::Submit => return self.submit(),
+            _ => {}
+        };
+        None
+    }
+
+    fn render(&self, frame: &mut Frame) {
+        let block = self.create_popup_block("Share Folder".to_string());
+        let vertical = Layout::vertical([Constraint::Length(2), Constraint::Length(1)]);
+
+        let area = centered_rect(50, 50, frame.area());
+        Clear.render(area, frame.buffer_mut());
+        let [message_area, buttons_area] = vertical.areas(area.inner(Margin {
+            horizontal: 1,
+            vertical: 1,
+        }));
+        // TODO maybe show device label too
+        let line = Line::from(format!(
+            "Share {} ({}) with {}",
+            self.folder.folder_label, self.folder.folder_id, self.folder.device_id
+        ));
+        let selected_style = Style::new().bg(Color::DarkGray);
+
+        let buttons_line: Line = vec![
+            Span::styled(
+                "Share",
+                if matches!(self.focus, PendingFocus::Accept) {
+                    selected_style
+                } else {
+                    Style::new()
+                },
+            ),
+            Span::raw(" "),
+            Span::styled(
+                "Ignore",
+                if matches!(self.focus, PendingFocus::Ignore) {
+                    selected_style
+                } else {
+                    Style::new()
+                },
+            ),
+            Span::raw(" "),
+            Span::styled(
+                "Dismiss",
+                if matches!(self.focus, PendingFocus::Dismiss) {
                     selected_style
                 } else {
                     Style::new()

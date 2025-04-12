@@ -236,14 +236,14 @@ pub struct PendingDevice {
     address: std::net::SocketAddr,
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AddedPendingFolder {
     #[serde(rename = "deviceID")]
-    device_id: String,
+    pub device_id: String,
     #[serde(rename = "folderID")]
-    folder_id: String,
-    folder_label: String,
+    pub folder_id: String,
+    pub folder_label: String,
     receive_encrypted: bool,
     remote_encrypted: bool,
 }
