@@ -263,6 +263,7 @@ impl App {
                         Ok(folders) => state.lock().unwrap().pending_folders = folders,
                         Err(e) => warn!("failed to reload pending folders: {:?}", e),
                     }
+                    rerender_tx.send(Message::None).await.unwrap();
                 }
             }
         }
