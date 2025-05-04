@@ -20,12 +20,12 @@ pub struct FolderConfiguration {
     pub label: String,
     pub path: String,
     pub devices: Vec<FolderDevice>,
-    xattr_filter: XattrFilter,
+    pub xattr_filter: XattrFilter,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-struct XattrFilter {
+pub struct XattrFilter {
     entries: Vec<String>,
     max_single_entry_size: u64,
     max_total_size: u64,
@@ -47,8 +47,8 @@ impl Default for XattrFilter {
 pub struct FolderDevice {
     #[serde(rename = "deviceID")]
     pub device_id: String,
-    introduced_by: String,
-    encryption_password: String,
+    pub introduced_by: String,
+    pub encryption_password: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use color_eyre::eyre;
 
+use crate::api::types::{FolderDevice, XattrFilter};
 use crate::api::{Event, types as api};
 use crate::{AppError, api::client::Client};
 
@@ -308,9 +309,13 @@ impl From<api::DeviceConfiguration> for Device {
     }
 }
 
-impl Into<Device> for api::AddedPendingDevice {
-    fn into(self) -> Device {
-        todo!()
+impl From<api::AddedPendingDevice> for Device {
+    fn from(value: api::AddedPendingDevice) -> Self {
+        Self {
+            id: value.device_id,
+            name: value.name,
+            state: SharingState::Pending,
+        }
     }
 }
 
@@ -330,32 +335,39 @@ impl From<api::FolderConfiguration> for Folder {
     }
 }
 
-impl Into<Folder> for api::AddedPendingFolder {
-    fn into(self) -> Folder {
-        todo!()
+impl From<api::AddedPendingFolder> for Folder {
+    fn from(value: api::AddedPendingFolder) -> Self {
+        let mut hm = HashMap::new();
+        hm.insert(
+            value.device_id,
+            FolderDeviceSharingDetails::new_pending(Some(value.folder_label)),
+        );
+        Self {
+            id: value.folder_id,
+            label: String::new(),
+            path: String::new(),
+            state: SharingState::Pending,
+            shared_with: hm,
+        }
     }
 }
 
-impl Into<api::FolderConfiguration> for &Folder {
-    fn into(self) -> api::FolderConfiguration {
-        todo!()
-    }
-}
-
-impl Into<api::FolderConfiguration> for Folder {
-    fn into(self) -> api::FolderConfiguration {
-        (&self).into()
-    }
-}
-
-impl Into<api::DeviceConfiguration> for &Device {
-    fn into(self) -> api::DeviceConfiguration {
-        todo!()
-    }
-}
-
-impl Into<api::DeviceConfiguration> for Device {
-    fn into(self) -> api::DeviceConfiguration {
-        (&self).into()
+impl From<Folder> for api::FolderConfiguration {
+    fn from(value: Folder) -> Self {
+        let mut devices = vec![];
+        for (device_id, _info) in value.shared_with {
+            devices.push(FolderDevice {
+                device_id,
+                introduced_by: String::new(),
+                encryption_password: String::new(),
+            });
+        }
+        Self {
+            id: value.id,
+            label: value.label,
+            path: value.path,
+            devices,
+            xattr_filter: XattrFilter::default(),
+        }
     }
 }
