@@ -6,9 +6,10 @@ use ratatui::crossterm::{
     event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind},
 };
 
-use crate::ty::{AddedPendingDevice, AddedPendingFolder};
-
-use super::app::CurrentMode;
+use super::{
+    app::CurrentMode,
+    state::{Device, Folder},
+};
 
 #[derive(Debug, PartialEq)]
 pub enum Message {
@@ -35,14 +36,14 @@ pub enum Message {
     Submit,
     // Popups
     // NewFolder
-    NewFolder(crate::ty::Folder),
+    NewFolder(Folder),
     // PendingDevice
-    NewPendingDevice(AddedPendingDevice),
-    AcceptDevice(AddedPendingDevice),
+    NewPendingDevice(Device),
+    AcceptDevice(String),
     IgnoreDevice(String),
     DismissDevice(String),
     // PendingFolder
-    NewPendingFolder(AddedPendingFolder),
+    NewPendingFolder(String, String),
     None,
 }
 

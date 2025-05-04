@@ -11,17 +11,14 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
 
-use crate::ty::{AddedPendingDevice, AddedPendingFolder};
+use super::{app::CurrentMode, input::Message};
 
-use super::{
-    app::{CurrentMode, state::State},
-    input::Message,
-};
+use crate::tui::state::{Folder, State};
 
 pub trait Popup: std::fmt::Debug {
     /// Updates the state of the popup. If Some(Quit) is returned, the popup gets destroyed
     fn update(&mut self, msg: Message, state: Arc<Mutex<State>>) -> Option<Message>;
-    fn render(&self, frame: &mut Frame);
+    fn render(&self, frame: &mut Frame, state: Arc<Mutex<State>>);
     fn create_popup_block(&self, title: String) -> Block {
         let block = Block::default()
             .title_top(Line::from(format!("| {} |", title)).centered())
@@ -208,19 +205,11 @@ impl NewFolderPopup {
     }
     fn submit(&mut self) -> Option<Message> {
         *self.mode.lock().unwrap() = CurrentMode::Normal;
-        let folder_devices: Vec<_> = {
-            let devices = &self.state.lock().unwrap().devices;
-            self.selected_devices
-                .iter()
-                .filter_map(|device_id| devices.get(device_id).map(|device| device.into()))
-                .collect()
-        };
-
-        return Some(Message::NewFolder(crate::ty::Folder::new(
+        return Some(Message::NewFolder(Folder::new(
             self.id_input.text.clone(),
             self.label_input.text.clone(),
             self.path_input.text.clone(),
-            folder_devices,
+            self.selected_devices.iter().cloned().collect(),
         )));
     }
 }
@@ -279,7 +268,7 @@ impl Popup for NewFolderPopup {
         None
     }
 
-    fn render(&self, frame: &mut Frame) {
+    fn render(&self, frame: &mut Frame, _state: Arc<Mutex<State>>) {
         let block = self.create_popup_block("New Folder".to_string());
         let vertical = Layout::vertical([
             Constraint::Length(1),
@@ -382,7 +371,7 @@ impl Popup for NewFolderPopup {
 
 #[derive(Debug)]
 pub struct PendingDevicePopup {
-    device: AddedPendingDevice,
+    device_id: String,
     focus: PendingFocus,
 }
 
@@ -413,18 +402,18 @@ impl PendingFocus {
 }
 
 impl PendingDevicePopup {
-    pub fn new(device: AddedPendingDevice) -> Self {
+    pub fn new(device_id: String) -> Self {
         Self {
-            device,
+            device_id,
             focus: PendingFocus::default(),
         }
     }
 
     fn submit(&self) -> Option<Message> {
         match self.focus {
-            PendingFocus::Accept => Some(Message::AcceptDevice(self.device.clone())),
-            PendingFocus::Ignore => Some(Message::IgnoreDevice(self.device.device_id.clone())),
-            PendingFocus::Dismiss => Some(Message::DismissDevice(self.device.device_id.clone())),
+            PendingFocus::Accept => Some(Message::AcceptDevice(self.device_id.clone())),
+            PendingFocus::Ignore => Some(Message::IgnoreDevice(self.device_id.clone())),
+            PendingFocus::Dismiss => Some(Message::DismissDevice(self.device_id.clone())),
         }
     }
 }
@@ -441,7 +430,7 @@ impl Popup for PendingDevicePopup {
         None
     }
 
-    fn render(&self, frame: &mut Frame) {
+    fn render(&self, frame: &mut Frame, _state: Arc<Mutex<State>>) {
         let block = self.create_popup_block("Pending Device".to_string());
         let vertical = Layout::vertical([Constraint::Length(2), Constraint::Length(1)]);
 
@@ -451,7 +440,8 @@ impl Popup for PendingDevicePopup {
             horizontal: 1,
             vertical: 1,
         }));
-        let line = Line::from(format!("Device {} wants to connect.", self.device));
+        // TODO use state to load device name
+        let line = Line::from(format!("Device {} wants to connect.", self.device_id));
 
         let selected_style = Style::new().bg(Color::DarkGray);
 
@@ -501,21 +491,24 @@ impl Popup for PendingAddFolderPopup {
         todo!()
     }
 
-    fn render(&self, _frame: &mut Frame) {
+    fn render(&self, _frame: &mut Frame, _state: Arc<Mutex<State>>) {
         todo!()
     }
 }
 
+/// Popup to share an already existing folder with a new device
 #[derive(Debug)]
 pub struct PendingShareFolderPopup {
-    folder: AddedPendingFolder,
+    folder_id: String,
+    device_id: String,
     focus: PendingFocus,
 }
 
 impl PendingShareFolderPopup {
-    pub fn new(folder: AddedPendingFolder) -> Self {
+    pub fn new(folder_id: String, device_id: String) -> Self {
         Self {
-            folder,
+            folder_id,
+            device_id,
             focus: PendingFocus::default(),
         }
     }
@@ -537,7 +530,7 @@ impl Popup for PendingShareFolderPopup {
         None
     }
 
-    fn render(&self, frame: &mut Frame) {
+    fn render(&self, frame: &mut Frame, state: Arc<Mutex<State>>) {
         let block = self.create_popup_block("Share Folder".to_string());
         let vertical = Layout::vertical([Constraint::Length(2), Constraint::Length(1)]);
 
@@ -547,11 +540,17 @@ impl Popup for PendingShareFolderPopup {
             horizontal: 1,
             vertical: 1,
         }));
-        // TODO maybe show device label too
-        let line = Line::from(format!(
-            "Share {} ({}) with {}",
-            self.folder.folder_label, self.folder.folder_id, self.folder.device_id
-        ));
+        let line = {
+            // TODO maybe show device label too
+            let state = state.lock().unwrap();
+            let folder = state
+                .get_folder(&self.folder_id)
+                .expect("folder to be shared does not exist on this device.");
+            Line::from(format!(
+                "Share {} ({}) with {}",
+                folder.label, folder.id, self.device_id
+            ))
+        };
         let selected_style = Style::new().bg(Color::DarkGray);
 
         let buttons_line: Line = vec![

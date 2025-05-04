@@ -1,9 +1,5 @@
-mod client;
-pub use client::Client;
-
-mod ty;
-pub use ty::Configuration;
-pub use ty::Event;
+mod api;
+pub use api::client::Client;
 
 mod config;
 pub use config::AppConfig;

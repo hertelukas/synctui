@@ -7,7 +7,7 @@ use ratatui::{
 
 use ratatui::widgets::Widget;
 
-use crate::tui::{app::App, input::Message};
+use crate::tui::{app::App, input::Message, state::SharingState};
 
 pub struct PendingPage<'a> {
     app: &'a App,
@@ -136,10 +136,9 @@ impl Widget for &PendingPage<'_> {
             .state
             .lock()
             .unwrap()
-            .pending_devices
-            .get_sorted()
+            .get_pending_devices()
             .iter()
-            .map(|(id, device)| Line::from(format!("{} ({})", device.name, id)))
+            .map(|device| Line::from(format!("{} ({})", device.name, device.id)))
             .collect();
 
         let devices_list = List::new(devices_list)
@@ -155,18 +154,25 @@ impl Widget for &PendingPage<'_> {
         let folders_list: Vec<_> = {
             let state = self.app.state.lock().unwrap();
             state
-                .pending_folders
-                .get_sorted()
+                .get_pending_folder_sharer()
                 .iter()
-                .map(|(folder_id, device_id, folder)| {
-                    let device_name = if let Some(device) = state.devices.get(*device_id) {
+                .map(|(folder, (device_id, share_details))| {
+                    let device_name = if let Ok(device) = state.get_device(device_id) {
                         device.name.clone()
                     } else {
                         "Unknown device".to_string()
                     };
+                    let (text, label) = if folder.state == SharingState::Configured {
+                        ("[Share]", folder.label.as_str())
+                    } else {
+                        (
+                            "[Add]",
+                            share_details.remote_label.as_deref().unwrap_or("<unknown>"),
+                        )
+                    };
                     Line::from(format!(
-                        "\"{}\" ({}) - {}",
-                        folder.label, folder_id, device_name
+                        "{} \"{}\" ({}) - {}",
+                        text, label, folder.id, device_name
                     ))
                 })
                 .collect()

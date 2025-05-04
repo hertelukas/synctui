@@ -16,9 +16,10 @@ use ratatui::{
     prelude::{Backend, CrosstermBackend},
 };
 
-use crate::Client;
+use crate::api::client::Client;
 
 mod app;
+pub mod state;
 pub use app::Reload;
 mod input;
 mod popup;

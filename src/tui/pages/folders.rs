@@ -35,7 +35,7 @@ impl Widget for &FoldersPage<'_> {
             .state
             .lock()
             .unwrap()
-            .folders
+            .get_folders()
             .iter()
             .map(|f| f.label.clone())
             .collect();
@@ -48,7 +48,7 @@ impl Widget for &FoldersPage<'_> {
 
         if let Some(folder_index) = self.app.selected_folder {
             let state = self.app.state.lock().unwrap();
-            if let Some(folder) = state.folders.get(folder_index) {
+            if let Some(folder) = state.get_folders().get(folder_index) {
                 let block = Block::default()
                     .title_top(Line::from(format!("| {} |", folder.label)).centered())
                     .borders(Borders::ALL);
@@ -58,15 +58,17 @@ impl Widget for &FoldersPage<'_> {
                 folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
                 folder_info.push(ListItem::new(Line::from(format!(
                     "Shared with {} device{}",
-                    folder.get_devices(&state).len(),
-                    if folder.get_devices(&state).len() == 1 {
+                    folder.get_configured_sharer().len(),
+                    if folder.get_configured_sharer().len() == 1 {
                         ""
                     } else {
                         "s"
                     }
                 ))));
-                for device in &folder.get_devices(&state) {
-                    folder_info.push(ListItem::new(Line::from(device.name.clone())));
+                for (device_id, _) in &folder.get_configured_sharer() {
+                    if let Ok(device) = state.get_device(device_id) {
+                        folder_info.push(ListItem::new(Line::from(device.name.clone())));
+                    }
                 }
                 let inner_area = block.inner(chunks[1]);
                 block.render(chunks[1], buf);

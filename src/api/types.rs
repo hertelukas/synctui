@@ -1,3 +1,4 @@
+///! Types reflecting the [official types](https://github.com/syncthing/syncthing/blob/main/lib/config/config.go)
 use std::collections::HashMap;
 
 use chrono::Utc;
@@ -7,30 +8,19 @@ use serde::Serialize;
 /// Represents the Syncthing configuration XML object.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Configuration {
-    pub folders: Vec<Folder>,
-    pub devices: Vec<Device>,
+    version: u64,
+    pub folders: Vec<FolderConfiguration>,
+    pub devices: Vec<DeviceConfiguration>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct Folder {
+pub struct FolderConfiguration {
     pub id: String,
     pub label: String,
     pub path: String,
     pub devices: Vec<FolderDevice>,
     xattr_filter: XattrFilter,
-}
-
-impl Folder {
-    pub fn new(id: String, label: String, path: String, devices: Vec<FolderDevice>) -> Self {
-        Self {
-            id,
-            label,
-            path,
-            devices,
-            xattr_filter: XattrFilter::default(),
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -61,19 +51,9 @@ pub struct FolderDevice {
     encryption_password: String,
 }
 
-impl FolderDevice {
-    pub fn new(id: &str) -> Self {
-        Self {
-            device_id: id.to_string(),
-            introduced_by: String::new(),
-            encryption_password: String::new(),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Device {
+pub struct DeviceConfiguration {
     #[serde(rename = "deviceID")]
     pub device_id: String,
     pub name: String,
@@ -178,37 +158,6 @@ pub struct AddedPendingDevice {
     pub name: String,
 }
 
-impl AddedPendingDevice {
-    pub fn from_pending_device(id: &str, device: &PendingDevice) -> Self {
-        Self {
-            address: device.address,
-            device_id: id.to_string(),
-            name: device.name.clone(),
-        }
-    }
-}
-
-impl Into<Device> for AddedPendingDevice {
-    fn into(self) -> Device {
-        Device {
-            device_id: self.device_id,
-            name: self.name,
-            // TODO
-            addresses: vec!["dynamic".to_string()],
-            compression: Compression::default(),
-        }
-    }
-}
-
-impl std::fmt::Display for AddedPendingDevice {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "\"{}\" ({} at {})",
-            self.name, self.device_id, self.address
-        ))
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct RemovedPendingDevice {
     #[serde(rename = "deviceID")]
@@ -218,15 +167,7 @@ pub struct RemovedPendingDevice {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct PendingDevices {
     #[serde(flatten)]
-    devices: HashMap<String, PendingDevice>,
-}
-
-impl PendingDevices {
-    // TODO sort
-    pub fn get_sorted(&self) -> Vec<(&String, &PendingDevice)> {
-        let res = self.devices.iter().collect();
-        res
-    }
+    pub devices: HashMap<String, PendingDevice>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -248,22 +189,6 @@ pub struct AddedPendingFolder {
     remote_encrypted: bool,
 }
 
-impl AddedPendingFolder {
-    pub fn from_pending_folder_offerer(
-        folder_id: &str,
-        folder: &PendingFolderOfferer,
-        device_id: &str,
-    ) -> Self {
-        Self {
-            device_id: device_id.to_string(),
-            folder_id: folder_id.to_string(),
-            folder_label: folder.label.clone(),
-            receive_encrypted: folder.receive_encrypted,
-            remote_encrypted: folder.remote_encrypted,
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct RemovedPendingFolder {
     /// A removed entry without `device_id`, means that the folder is
@@ -277,26 +202,7 @@ pub struct RemovedPendingFolder {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct PendingFolders {
     #[serde(flatten)]
-    folders: HashMap<String, PendingFolder>,
-}
-
-impl PendingFolders {
-    // TODO sort
-    pub fn get_sorted(&self) -> Vec<(&String, &String, &PendingFolderOfferer)> {
-        let res = self
-            .folders
-            .iter()
-            .map(|(folder_id, pending_folder)| {
-                pending_folder
-                    .offered_by
-                    .iter()
-                    .map(|(device_id, pendig_folder)| (folder_id, device_id, pendig_folder))
-                    .collect::<Vec<_>>()
-            })
-            .flatten()
-            .collect();
-        res
-    }
+    pub folders: HashMap<String, PendingFolder>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

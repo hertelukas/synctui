@@ -1,19 +1,20 @@
 use std::sync::{Arc, Mutex};
 
 use log::{debug, error, warn};
-use state::State;
 use strum::IntoEnumIterator;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
 use crate::{
-    AppError, Client, Event,
-    ty::{AddedPendingDevice, AddedPendingFolder, EventType},
+    AppError,
+    api::{Event, EventType, client::Client},
+    tui::state::State,
 };
 
 use super::{
     input::Message,
     pages::PendingPageState,
     popup::{NewFolderPopup, PendingDevicePopup, PendingShareFolderPopup, Popup},
+    state::{Folder, SharingState},
 };
 
 #[derive(Default, Debug, strum::EnumIter, PartialEq)]
@@ -59,7 +60,9 @@ impl TryFrom<u32> for CurrentScreen {
 /// Tracks current state of application
 #[derive(Debug)]
 pub struct App {
-    pub client: Client,
+    // TODO remove this, the app should not directly need the client,
+    // but go through the state
+    client: Client,
     rerender_tx: Sender<Message>,
     reload_tx: Sender<Reload>,
     pub running: bool,
@@ -85,12 +88,12 @@ impl App {
     pub fn new(client: Client, rerender_tx: Sender<Message>) -> Self {
         let (reload_tx, reload_rx) = mpsc::channel(10);
         let app = App {
-            client,
+            client: client.clone(),
             rerender_tx,
             reload_tx: reload_tx.clone(),
             running: true,
             current_screen: CurrentScreen::default(),
-            state: Arc::new(Mutex::new(State::default())),
+            state: Arc::new(Mutex::new(State::new(client.clone()))),
             selected_folder: None,
             selected_device: None,
             pending_state: PendingPageState::default(),
@@ -103,13 +106,13 @@ impl App {
         let rerender_tx = app.rerender_tx.clone();
         let state_handle = app.state.clone();
         let error_handle = app.error.clone();
-        let client = app.client.clone();
+        let client_handle = client.clone();
 
         let (event_tx, event_rx) = mpsc::channel(10);
 
         // Start listening to events
         tokio::spawn(async move {
-            if let Err(e) = client.get_events(event_tx, true).await {
+            if let Err(e) = client_handle.get_events(event_tx, true).await {
                 error!("failed to get events: {:?}", e);
                 *error_handle.lock().unwrap() = Some(e)
             };
@@ -126,7 +129,6 @@ impl App {
         let rerender_tx = app.rerender_tx.clone();
         let state_handle = app.state.clone();
         let error_handle = app.error.clone();
-        let client = app.client.clone();
         tokio::spawn(async move {
             Self::handle_reload(reload_rx, client, state_handle, rerender_tx, error_handle).await
         });
@@ -167,7 +169,7 @@ impl App {
                     if let Some(added) = added {
                         if let Some(first) = added.first() {
                             if let Err(e) = rerender_tx
-                                .send(Message::NewPendingDevice(first.clone()))
+                                .send(Message::NewPendingDevice(first.clone().into()))
                                 .await
                             {
                                 warn!(
@@ -190,7 +192,10 @@ impl App {
                     if let Some(added) = added {
                         if let Some(first) = added.first() {
                             if let Err(e) = rerender_tx
-                                .send(Message::NewPendingFolder(first.clone()))
+                                .send(Message::NewPendingFolder(
+                                    first.folder_id.clone(),
+                                    first.device_id.clone(),
+                                ))
                                 .await
                             {
                                 warn!(
@@ -252,7 +257,7 @@ impl App {
                 Reload::PendingDevices => {
                     let devices = client.get_pending_devices().await;
                     match devices {
-                        Ok(devices) => state.lock().unwrap().pending_devices = devices,
+                        Ok(devices) => state.lock().unwrap().set_pending_devices(devices),
                         Err(e) => warn!("failed to reload pending devices: {:?}", e),
                     }
                     rerender_tx.send(Message::None).await.unwrap();
@@ -260,7 +265,7 @@ impl App {
                 Reload::PendingFolders => {
                     let folders = client.get_pending_folders().await;
                     match folders {
-                        Ok(folders) => state.lock().unwrap().pending_folders = folders,
+                        Ok(folders) => state.lock().unwrap().set_pending_folders(folders),
                         Err(e) => warn!("failed to reload pending folders: {:?}", e),
                     }
                     rerender_tx.send(Message::None).await.unwrap();
@@ -283,19 +288,18 @@ impl App {
     fn update_folders(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Down => {
-                let len = self.state.lock().unwrap().folders.len();
+                let len = self.state.lock().unwrap().get_folders().len();
                 if len == 0 {
                     return None;
                 }
                 if let Some(highlighted_folder) = self.selected_folder {
-                    self.selected_folder =
-                        Some((highlighted_folder + 1) % self.state.lock().unwrap().folders.len())
+                    self.selected_folder = Some((highlighted_folder + 1) % len)
                 } else {
                     self.selected_folder = Some(0);
                 }
             }
             Message::Up => {
-                let len = self.state.lock().unwrap().folders.len();
+                let len = self.state.lock().unwrap().get_folders().len();
                 if len == 0 {
                     return None;
                 }
@@ -347,54 +351,32 @@ impl App {
     }
 
     fn update_pending(&mut self, msg: Message) -> Option<Message> {
-        let devices_len = self
-            .state
-            .lock()
-            .unwrap()
-            .pending_devices
-            .get_sorted()
-            .len();
+        let devices_len = self.state.lock().unwrap().get_pending_devices().len();
 
-        let folders_len = self
-            .state
-            .lock()
-            .unwrap()
-            .pending_folders
-            .get_sorted()
-            .len();
+        let folders_len = self.state.lock().unwrap().get_pending_folder_sharer().len();
 
         self.pending_state.update(&msg, devices_len, folders_len);
         if matches!(msg, Message::Select) {
             // Device Popup
             if let Some(index) = self.pending_state.device_selected() {
-                if let Some((id, device)) = self
-                    .state
-                    .lock()
-                    .unwrap()
-                    .pending_devices
-                    .get_sorted()
-                    .get(index)
-                {
-                    self.popup = Some(Box::new(PendingDevicePopup::new(
-                        AddedPendingDevice::from_pending_device(&id, device),
-                    )))
+                if let Some(device) = self.state.lock().unwrap().get_pending_devices().get(index) {
+                    self.popup = Some(Box::new(PendingDevicePopup::new(device.id.clone())))
                 };
             };
             // Folder Popup
             if let Some(index) = self.pending_state.folder_selected() {
                 let state_handle = self.state.lock().unwrap();
-                if let Some((folder_id, device_id, folder)) =
-                    state_handle.pending_folders.get_sorted().get(index)
+                if let Some((folder, (device_id, _))) =
+                    state_handle.get_pending_folder_sharer().get(index)
                 {
-                    // Only need to share
-                    if state_handle.folders.iter().any(|f| f.id == **folder_id) {
+                    // Only need to share, folder exists already locally
+                    if folder.state == SharingState::Configured {
                         self.popup = Some(Box::new(PendingShareFolderPopup::new(
-                            AddedPendingFolder::from_pending_folder_offerer(
-                                folder_id, folder, device_id,
-                            ),
+                            folder.id.clone(),
+                            device_id.to_string(),
                         )))
                     } else {
-                        unimplemented!("new folder sharing");
+                        unimplemented!("new (unknown) folder sharing");
                     }
                 }
             }
@@ -402,13 +384,13 @@ impl App {
         None
     }
 
-    fn handle_new_folder(&mut self, folder: crate::ty::Folder) -> Option<Message> {
+    fn handle_new_folder(&mut self, folder: Folder) -> Option<Message> {
         // Raise an error if we have a duplicate id
         if self
             .state
             .lock()
             .unwrap()
-            .folders
+            .get_folders()
             .iter()
             .any(|f| f.id == folder.id)
         {
@@ -422,7 +404,9 @@ impl App {
         let client = self.client.clone();
         let error_handle = self.error.clone();
         tokio::spawn(async move {
-            if let Err(e) = client.post_folder(folder).await {
+            // TODO this should be done by the state, so we don't have
+            // to care about updating the state etc.
+            if let Err(e) = client.post_folder(folder.into()).await {
                 error!("failed to post new folder: {:?}", e);
                 *error_handle.lock().unwrap() = Some(e);
             }
@@ -440,16 +424,17 @@ impl App {
                 self.popup = None;
                 return self.handle_new_folder(folder);
             }
-            Message::AcceptDevice(ref device) => {
+            Message::AcceptDevice(ref _device) => {
                 self.popup = None;
-                let client = self.client.clone();
-                let error_handle = self.error.clone();
-                let device = device.clone();
+                let _client = self.client.clone();
+                let _error_handle = self.error.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = client.add_device(device.into()).await {
-                        error!("failed to add new device: {:?}", e);
-                        *error_handle.lock().unwrap() = Some(e);
-                    }
+                    // TODO do this in the state to handle updating correctly
+                    todo!();
+                    // if let Err(e) = client.add_device(device.into()).await {
+                    //     error!("failed to add new device: {:?}", e);
+                    //     *error_handle.lock().unwrap() = Some(e);
+                    // }
                 });
             }
             Message::IgnoreDevice(_) => {
@@ -500,19 +485,22 @@ impl App {
                 self.reload(Reload::Configuration);
             }
             Message::NewPendingDevice(ref device) => {
-                self.popup = Some(Box::new(PendingDevicePopup::new(device.clone())));
+                self.popup = Some(Box::new(PendingDevicePopup::new(device.id.clone())));
             }
-            Message::NewPendingFolder(ref folder) => {
+            Message::NewPendingFolder(ref folder_id, ref device_id) => {
                 // Folder already exists on our machine, just share
                 if self
                     .state
                     .lock()
                     .unwrap()
-                    .folders
+                    .get_folders()
                     .iter()
-                    .any(|f| f.id == folder.folder_id)
+                    .any(|f| f.id == *folder_id)
                 {
-                    self.popup = Some(Box::new(PendingShareFolderPopup::new(folder.clone())))
+                    self.popup = Some(Box::new(PendingShareFolderPopup::new(
+                        folder_id.clone(),
+                        device_id.to_string(),
+                    )))
                 } else {
                     unimplemented!("handle new folder")
                 }
@@ -526,110 +514,6 @@ impl App {
             CurrentScreen::Devices => self.update_devices(msg),
             CurrentScreen::Pending => self.update_pending(msg),
             _ => None,
-        }
-    }
-}
-
-pub mod state {
-    use std::collections::HashMap;
-
-    use crate::{
-        Configuration, Event,
-        ty::{PendingDevices, PendingFolders},
-    };
-
-    #[derive(Debug, Default)]
-    pub struct State {
-        pub folders: Vec<Folder>,
-        /// Maps device_id to devices
-        pub devices: HashMap<String, Device>,
-        pub events: Vec<Event>,
-        pub id: String,
-        pub pending_devices: PendingDevices,
-        pub pending_folders: PendingFolders,
-    }
-
-    impl State {
-        pub fn update_from_configuration(&mut self, configuration: Configuration) {
-            self.folders.clear();
-            self.devices.clear();
-            for device in configuration.devices {
-                self.devices.insert(device.device_id.clone(), device.into());
-            }
-            for folder in configuration.folders {
-                self.folders.push(folder.into());
-            }
-        }
-        pub fn get_devices(&self) -> Vec<&Device> {
-            let mut res: Vec<&Device> = self.devices.values().collect();
-
-            res.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-            res
-        }
-
-        pub fn get_other_devices(&self) -> Vec<&Device> {
-            self.get_devices()
-                .into_iter()
-                .filter(|device| device.id != self.id)
-                .collect()
-        }
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub struct Folder {
-        pub id: String,
-        pub label: String,
-        pub path: String, // or PathBuf?
-        device_ids: Vec<String>,
-    }
-
-    impl Folder {
-        pub fn get_devices<'a>(&self, state: &'a State) -> Vec<&'a Device> {
-            let mut res: Vec<_> = self
-                .device_ids
-                .iter()
-                .filter(|id| **id != state.id)
-                .filter_map(|id| state.devices.get(id))
-                .collect();
-
-            res.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-            res
-        }
-    }
-
-    impl From<crate::ty::Folder> for Folder {
-        fn from(folder: crate::ty::Folder) -> Self {
-            let mut device_ids = vec![];
-            for device in folder.devices {
-                device_ids.push(device.device_id);
-            }
-            Self {
-                id: folder.id,
-                label: folder.label,
-                path: folder.path,
-                device_ids,
-            }
-        }
-    }
-
-    #[derive(Debug, PartialEq)]
-    pub struct Device {
-        pub id: String,
-        pub name: String,
-    }
-
-    impl From<crate::ty::Device> for Device {
-        fn from(value: crate::ty::Device) -> Self {
-            Self {
-                id: value.device_id,
-                name: value.name,
-            }
-        }
-    }
-
-    impl Into<crate::ty::FolderDevice> for &Device {
-        fn into(self) -> crate::ty::FolderDevice {
-            crate::ty::FolderDevice::new(&self.id)
         }
     }
 }
