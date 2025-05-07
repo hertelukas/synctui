@@ -1,6 +1,7 @@
 use input::{EventHandler, Message};
 use log::debug;
 use std::io;
+use syncthing_rs::Client;
 use tokio::sync::mpsc::{self, Receiver};
 use ui::ui;
 
@@ -15,8 +16,6 @@ use ratatui::{
     },
     prelude::{Backend, CrosstermBackend},
 };
-
-use crate::api::client::Client;
 
 mod app;
 pub mod state;

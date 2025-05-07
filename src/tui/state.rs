@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
 use color_eyre::eyre;
+use syncthing_rs::Client;
+use syncthing_rs::types as api;
 
-use crate::api::types::{FolderDevice, XattrFilter};
-use crate::api::{Event, types as api};
-use crate::{AppError, api::client::Client};
+use crate::AppError;
 
 #[derive(Debug)]
 pub struct State {
     _client: Client,
     folders: Vec<Folder>,
     devices: Vec<Device>,
-    pub events: Vec<Event>,
+    pub events: Vec<api::events::Event>,
     /// Local Syncthing ID
     pub id: String,
 }
@@ -27,7 +27,7 @@ impl State {
         }
     }
 
-    pub fn update_from_configuration(&mut self, configuration: api::Configuration) {
+    pub fn update_from_configuration(&mut self, configuration: api::config::Configuration) {
         self.folders.clear();
         self.devices.clear();
         for device in configuration.devices {
@@ -38,7 +38,7 @@ impl State {
         }
     }
 
-    pub fn set_pending_devices(&mut self, pending_devices: api::PendingDevices) {
+    pub fn set_pending_devices(&mut self, pending_devices: api::cluster::PendingDevices) {
         for (device_id, device) in pending_devices.devices.iter() {
             if let Ok(d) = self.get_device(device_id) {
                 if d.state == SharingState::Configured {
@@ -54,7 +54,7 @@ impl State {
         }
     }
 
-    pub fn set_pending_folders(&mut self, pending_folders: api::PendingFolders) {
+    pub fn set_pending_folders(&mut self, pending_folders: api::cluster::PendingFolders) {
         for (folder_id, folder) in pending_folders.folders.iter() {
             if let Ok(f) = self.get_folder_mut(folder_id) {
                 // Check if we share with that device
@@ -299,8 +299,8 @@ impl Device {
     }
 }
 
-impl From<api::DeviceConfiguration> for Device {
-    fn from(value: api::DeviceConfiguration) -> Self {
+impl From<api::config::DeviceConfiguration> for Device {
+    fn from(value: api::config::DeviceConfiguration) -> Self {
         Self {
             id: value.device_id,
             name: value.name,
@@ -309,8 +309,8 @@ impl From<api::DeviceConfiguration> for Device {
     }
 }
 
-impl From<api::AddedPendingDevice> for Device {
-    fn from(value: api::AddedPendingDevice) -> Self {
+impl From<api::events::AddedPendingDeviceChanged> for Device {
+    fn from(value: api::events::AddedPendingDeviceChanged) -> Self {
         Self {
             id: value.device_id,
             name: value.name,
@@ -319,8 +319,8 @@ impl From<api::AddedPendingDevice> for Device {
     }
 }
 
-impl From<api::FolderConfiguration> for Folder {
-    fn from(value: api::FolderConfiguration) -> Self {
+impl From<api::config::FolderConfiguration> for Folder {
+    fn from(value: api::config::FolderConfiguration) -> Self {
         let mut hm = HashMap::new();
         for d in value.devices {
             hm.insert(d.device_id, FolderDeviceSharingDetails::new());
@@ -335,8 +335,8 @@ impl From<api::FolderConfiguration> for Folder {
     }
 }
 
-impl From<api::AddedPendingFolder> for Folder {
-    fn from(value: api::AddedPendingFolder) -> Self {
+impl From<api::events::AddedPendingFolderChanged> for Folder {
+    fn from(value: api::events::AddedPendingFolderChanged) -> Self {
         let mut hm = HashMap::new();
         hm.insert(
             value.device_id,
@@ -352,22 +352,11 @@ impl From<api::AddedPendingFolder> for Folder {
     }
 }
 
-impl From<Folder> for api::FolderConfiguration {
-    fn from(value: Folder) -> Self {
-        let mut devices = vec![];
-        for (device_id, _info) in value.shared_with {
-            devices.push(FolderDevice {
-                device_id,
-                introduced_by: String::new(),
-                encryption_password: String::new(),
-            });
-        }
-        Self {
-            id: value.id,
-            label: value.label,
-            path: value.path,
-            devices,
-            xattr_filter: XattrFilter::default(),
-        }
+impl From<Folder> for api::config::FolderConfiguration {
+    fn from(_value: Folder) -> Self {
+        todo!(
+            "this function should never be needed, just update
+single fields"
+        )
     }
 }

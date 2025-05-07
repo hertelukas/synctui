@@ -1,4 +1,4 @@
-use crate::{api::types::Event, tui::Reload};
+use crate::tui::Reload;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
@@ -13,8 +13,6 @@ pub enum AppError {
     #[error("folder ID already exists")]
     DuplicateFolderID,
     #[error(transparent)]
-    SendEventError(#[from] tokio::sync::mpsc::error::SendError<Event>),
-    #[error(transparent)]
     SendUnitError(#[from] tokio::sync::mpsc::error::SendError<()>),
     #[error(transparent)]
     SendReloadError(#[from] tokio::sync::mpsc::error::SendError<Reload>),
@@ -22,4 +20,6 @@ pub enum AppError {
     UnknownFolder,
     #[error("device not found")]
     UnknownDevice,
+    #[error("syncthing API error")]
+    SyncthingError(#[from] syncthing_rs::error::Error),
 }

@@ -1,6 +1,7 @@
 use clap::Parser;
 use color_eyre::eyre;
-use synctui::{AppConfig, Client, start};
+use syncthing_rs::Client;
+use synctui::{AppConfig, start};
 use tokio::{sync::mpsc, task};
 
 /// CLI wrapper around the syncthing API
@@ -40,7 +41,7 @@ async fn main() -> eyre::Result<()> {
             None => AppConfig::load(args.config)?.api_key,
         }
     };
-    let client = Client::new(&api_key)?;
+    let client = Client::builder(&api_key).build()?;
 
     if args.cli {
         client.ping().await?;

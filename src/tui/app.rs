@@ -2,13 +2,13 @@ use std::sync::{Arc, Mutex};
 
 use log::{debug, error, warn};
 use strum::IntoEnumIterator;
+use syncthing_rs::{
+    Client,
+    types::events::{Event, EventType},
+};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 
-use crate::{
-    AppError,
-    api::{Event, EventType, client::Client},
-    tui::state::State,
-};
+use crate::{AppError, tui::state::State};
 
 use super::{
     input::Message,
@@ -114,7 +114,7 @@ impl App {
         tokio::spawn(async move {
             if let Err(e) = client_handle.get_events(event_tx, true).await {
                 error!("failed to get events: {:?}", e);
-                *error_handle.lock().unwrap() = Some(e)
+                *error_handle.lock().unwrap() = Some(e.into())
             };
         });
 
@@ -235,7 +235,7 @@ impl App {
                         }
                         Err(e) => {
                             error!("failed to reload config: {:?}", e);
-                            *error.lock().unwrap() = Some(e);
+                            *error.lock().unwrap() = Some(e.into());
                         }
                     }
 
@@ -249,7 +249,7 @@ impl App {
                         }
                         Err(e) => {
                             error!("failed to load Syncthing ID: {:?}", e);
-                            *error.lock().unwrap() = Some(e);
+                            *error.lock().unwrap() = Some(e.into());
                         }
                     }
                     rerender_tx.send(Message::None).await.unwrap();
@@ -400,17 +400,18 @@ impl App {
 
         // TODO maybe check that path is valid
 
-        let reload_tx = self.rerender_tx.clone();
-        let client = self.client.clone();
-        let error_handle = self.error.clone();
+        let _reload_tx = self.rerender_tx.clone();
+        let _client = self.client.clone();
+        let _error_handle = self.error.clone();
         tokio::spawn(async move {
             // TODO this should be done by the state, so we don't have
             // to care about updating the state etc.
-            if let Err(e) = client.post_folder(folder.into()).await {
-                error!("failed to post new folder: {:?}", e);
-                *error_handle.lock().unwrap() = Some(e);
-            }
-            reload_tx.send(Message::None).await.unwrap();
+            todo!("in state");
+            // if let Err(e) = client.post_folder(folder.into()).await {
+            //     error!("failed to post new folder: {:?}", e);
+            //     *error_handle.lock().unwrap() = Some(e.into());
+            // }
+            // reload_tx.send(Message::None).await.unwrap();
         });
         None
     }
@@ -449,7 +450,7 @@ impl App {
                 tokio::spawn(async move {
                     if let Err(e) = client.delete_pending_device(&device).await {
                         error!("failed to delete pending device: {:?}", e);
-                        *error_handle.lock().unwrap() = Some(e);
+                        *error_handle.lock().unwrap() = Some(e.into());
                     }
                 });
             }
