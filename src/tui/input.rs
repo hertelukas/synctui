@@ -119,15 +119,10 @@ impl EventHandler {
             let mut reader = crossterm::event::EventStream::new();
             loop {
                 let event = reader.next().await;
-                if let Some(Ok(event)) = event {
-                    match event {
-                        CrosstermEvent::Key(key) => {
-                            if key.kind == KeyEventKind::Press {
-                                debug!("got key {key:?} - sending");
-                                tx.send(Event::Key(key)).unwrap();
-                            }
-                        }
-                        _ => {}
+                if let Some(Ok(CrosstermEvent::Key(key))) = event {
+                    if key.kind == KeyEventKind::Press {
+                        debug!("got key {key:?} - sending");
+                        tx.send(Event::Key(key)).unwrap();
                     }
                 }
             }

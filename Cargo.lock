@@ -1786,7 +1786,7 @@ dependencies = [
 [[package]]
 name = "syncthing-rs"
 version = "0.1.0"
-source = "git+https://github.com/hertelukas/syncthing-rs.git#743897d59cc414a8bc42b714a4b3506eaf231cb6"
+source = "git+https://github.com/hertelukas/syncthing-rs.git#64ad6c7be70e75fcec23a5046eafbe4ea0e93782"
 dependencies = [
  "chrono",
  "log",

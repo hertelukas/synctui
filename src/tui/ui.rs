@@ -14,7 +14,7 @@ use super::{
 
 pub fn ui(frame: &mut Frame, app: &App) {
     // If we have an error, show only that
-    app.state.read(|state| {
+    if app.state.read(|state| {
         if let Some(error) = &state.error {
             let popup_block =
                 create_popup_block(app, "Error".to_string()).style(Style::default().fg(Color::Red));
@@ -27,10 +27,13 @@ pub fn ui(frame: &mut Frame, app: &App) {
 
             let area = centered_rect(50, 50, frame.area());
             frame.render_widget(error_paragraph, area);
-
-            return;
+            true
+        } else {
+            false
         }
-    });
+    }) {
+        return;
+    }
 
     let background = create_background(app);
     let inner_area = background.inner(frame.area());

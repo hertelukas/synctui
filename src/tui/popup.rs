@@ -138,10 +138,7 @@ enum NewFolderFocus {
 
 impl NewFolderFocus {
     fn is_input(&self) -> bool {
-        match self {
-            Self::Device(_) | Self::SubmitButton => false,
-            _ => true,
-        }
+        !matches!(self, Self::Device(_) | Self::SubmitButton)
     }
 }
 
@@ -205,12 +202,12 @@ impl NewFolderPopup {
     }
     fn submit(&mut self) -> Option<Message> {
         *self.mode.lock().unwrap() = CurrentMode::Normal;
-        return Some(Message::NewFolder(Folder::new(
+        Some(Message::NewFolder(Folder::new(
             self.id_input.text.clone(),
             self.label_input.text.clone(),
             self.path_input.text.clone(),
             self.selected_devices.iter().cloned().collect(),
-        )));
+        )))
     }
 }
 

@@ -109,10 +109,9 @@ impl App {
         while let Ok(event) = event_rx.recv().await {
             debug!("Received event: {:?}", event);
             match event.ty {
-                // TODO close popup if the pending device was removed
                 EventType::PendingDevicesChanged {
                     ref added,
-                    removed: _,
+                    ref removed,
                 } => {
                     if let Some(added) = added {
                         if let Some(first) = added.first() {
@@ -128,10 +127,13 @@ impl App {
                             }
                         }
                     }
+                    if let Some(_removed) = removed {
+                        todo!("potentially close popup")
+                    }
                 }
                 EventType::PendingFoldersChanged {
                     ref added,
-                    removed: _,
+                    ref removed,
                 } => {
                     if let Some(added) = added {
                         if let Some(first) = added.first() {
@@ -149,6 +151,9 @@ impl App {
                             }
                         }
                     }
+                    if let Some(_removed) = removed {
+                        todo!("potentially close popup")
+                    }
                 }
                 _ => {}
             }
@@ -160,7 +165,7 @@ impl App {
         mut reload_rx: broadcast::Receiver<()>,
         rerender_tx: mpsc::Sender<Message>,
     ) {
-        while let Ok(_) = reload_rx.recv().await {
+        while reload_rx.recv().await.is_ok() {
             rerender_tx.send(Message::None).await.unwrap();
         }
         unreachable!("the config sender should never have been dropped")

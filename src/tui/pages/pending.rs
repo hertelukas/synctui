@@ -77,12 +77,10 @@ impl PendingPageState {
                     } else {
                         self.focused_device = Some(0);
                     }
+                } else if let Some(i) = self.focused_folder {
+                    self.focused_folder = Some((i + 1) % total_folders);
                 } else {
-                    if let Some(i) = self.focused_folder {
-                        self.focused_folder = Some((i + 1) % total_folders);
-                    } else {
-                        self.focused_folder = Some(0);
-                    }
+                    self.focused_folder = Some(0);
                 }
             }
             Message::Up => {
@@ -92,12 +90,10 @@ impl PendingPageState {
                     } else {
                         self.focused_device = Some(total_devices - 1);
                     }
+                } else if let Some(i) = self.focused_folder {
+                    self.focused_folder = Some((i + total_folders - 1) % total_folders);
                 } else {
-                    if let Some(i) = self.focused_folder {
-                        self.focused_folder = Some((i + total_folders - 1) % total_folders);
-                    } else {
-                        self.focused_folder = Some(total_folders - 1);
-                    }
+                    self.focused_folder = Some(total_folders - 1);
                 }
             }
             _ => {}

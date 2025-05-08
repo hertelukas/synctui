@@ -78,7 +78,7 @@ impl State {
         F: FnOnce(&InnerState) -> R,
     {
         let guard = self.inner.read().unwrap();
-        f(&*guard)
+        f(&guard)
     }
 
     /// Read only access to the state. External users should never
@@ -89,7 +89,7 @@ impl State {
         F: FnOnce(&mut InnerState) -> R,
     {
         let mut guard = self.inner.write().unwrap();
-        f(&mut *guard)
+        f(&mut guard)
     }
 
     /// Initiate a reload of parts of the state, defined by `Reload`,
@@ -400,7 +400,7 @@ impl Folder {
     pub fn new(id: String, label: String, path: String, devices: Vec<String>) -> Self {
         let mut hm = HashMap::new();
         for d in devices {
-            hm.insert(d, FolderDeviceSharingDetails::new());
+            hm.insert(d, FolderDeviceSharingDetails::new_configured());
         }
         Self {
             id,
@@ -458,7 +458,7 @@ pub struct FolderDeviceSharingDetails {
 }
 
 impl FolderDeviceSharingDetails {
-    pub fn new() -> Self {
+    pub fn new_configured() -> Self {
         Self {
             state: SharingState::Configured,
             remote_label: None,
@@ -514,7 +514,7 @@ impl From<api::config::FolderConfiguration> for Folder {
     fn from(value: api::config::FolderConfiguration) -> Self {
         let mut hm = HashMap::new();
         for d in value.devices {
-            hm.insert(d.device_id, FolderDeviceSharingDetails::new());
+            hm.insert(d.device_id, FolderDeviceSharingDetails::new_configured());
         }
         Self {
             id: value.id,
