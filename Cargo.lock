@@ -1785,8 +1785,9 @@ dependencies = [
 
 [[package]]
 name = "syncthing-rs"
-version = "0.1.0"
-source = "git+https://github.com/hertelukas/syncthing-rs.git#64ad6c7be70e75fcec23a5046eafbe4ea0e93782"
+version = "0.1.0-alpha.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7710f48c7841d93bcf6612d986c494ece0b1075250cb7399893e9d0adba6f2b"
 dependencies = [
  "chrono",
  "log",
