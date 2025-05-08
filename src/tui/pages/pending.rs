@@ -131,15 +131,13 @@ impl Widget for &PendingPage<'_> {
             .split(area);
 
         // Devices
-        let devices_list: Vec<_> = self
-            .app
-            .state
-            .lock()
-            .unwrap()
-            .get_pending_devices()
-            .iter()
-            .map(|device| Line::from(format!("{} ({})", device.name, device.id)))
-            .collect();
+        let devices_list: Vec<_> = self.app.state.read(|state| {
+            state
+                .get_folders()
+                .iter()
+                .map(|f| f.label.clone())
+                .collect()
+        });
 
         let devices_list = List::new(devices_list)
             .block(Block::default().title(Span::styled("Pending Devices", Style::new().bold())))
@@ -151,8 +149,7 @@ impl Widget for &PendingPage<'_> {
         StatefulWidget::render(devices_list, chunks[0], buf, &mut devices_list_state);
 
         // Folders
-        let folders_list: Vec<_> = {
-            let state = self.app.state.lock().unwrap();
+        let folders_list: Vec<_> = self.app.state.read(|state| {
             state
                 .get_pending_folder_sharer()
                 .iter()
@@ -176,7 +173,7 @@ impl Widget for &PendingPage<'_> {
                     ))
                 })
                 .collect()
-        };
+        });
         let folders_list = List::new(folders_list)
             .block(Block::default().title(Span::styled("Pending Folders", Style::new().bold())))
             .highlight_style(Style::new().bg(Color::DarkGray));

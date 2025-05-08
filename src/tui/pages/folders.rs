@@ -30,15 +30,13 @@ impl Widget for &FoldersPage<'_> {
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(area);
 
-        let list_items: Vec<_> = self
-            .app
-            .state
-            .lock()
-            .unwrap()
-            .get_folders()
-            .iter()
-            .map(|f| f.label.clone())
-            .collect();
+        let list_items: Vec<_> = self.app.state.read(|state| {
+            state
+                .get_folders()
+                .iter()
+                .map(|f| f.label.clone())
+                .collect()
+        });
 
         let list = List::new(list_items).highlight_style(Style::new().bg(Color::DarkGray));
 
@@ -47,34 +45,35 @@ impl Widget for &FoldersPage<'_> {
         StatefulWidget::render(list, chunks[0], buf, &mut list_state);
 
         if let Some(folder_index) = self.app.selected_folder {
-            let state = self.app.state.lock().unwrap();
-            if let Some(folder) = state.get_folders().get(folder_index) {
-                let block = Block::default()
-                    .title_top(Line::from(format!("| {} |", folder.label)).centered())
-                    .borders(Borders::ALL);
-                // Folder information
-                let mut folder_info = Vec::<ListItem>::new();
-                folder_info.push(ListItem::new(Line::from(format!("ID: {}", folder.id))));
-                folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
-                folder_info.push(ListItem::new(Line::from(format!(
-                    "Shared with {} device{}",
-                    folder.get_configured_sharer().len(),
-                    if folder.get_configured_sharer().len() == 1 {
-                        ""
-                    } else {
-                        "s"
+            self.app.state.read(|state| {
+                if let Some(folder) = state.get_folders().get(folder_index) {
+                    let block = Block::default()
+                        .title_top(Line::from(format!("| {} |", folder.label)).centered())
+                        .borders(Borders::ALL);
+                    // Folder information
+                    let mut folder_info = Vec::<ListItem>::new();
+                    folder_info.push(ListItem::new(Line::from(format!("ID: {}", folder.id))));
+                    folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
+                    folder_info.push(ListItem::new(Line::from(format!(
+                        "Shared with {} device{}",
+                        folder.get_configured_sharer().len(),
+                        if folder.get_configured_sharer().len() == 1 {
+                            ""
+                        } else {
+                            "s"
+                        }
+                    ))));
+                    for (device_id, _) in &folder.get_configured_sharer() {
+                        if let Ok(device) = state.get_device(device_id) {
+                            folder_info.push(ListItem::new(Line::from(device.name.clone())));
+                        }
                     }
-                ))));
-                for (device_id, _) in &folder.get_configured_sharer() {
-                    if let Ok(device) = state.get_device(device_id) {
-                        folder_info.push(ListItem::new(Line::from(device.name.clone())));
-                    }
+                    let inner_area = block.inner(chunks[1]);
+                    block.render(chunks[1], buf);
+                    let list = List::new(folder_info);
+                    Widget::render(list, inner_area, buf);
                 }
-                let inner_area = block.inner(chunks[1]);
-                block.render(chunks[1], buf);
-                let list = List::new(folder_info);
-                Widget::render(list, inner_area, buf);
-            }
+            });
         }
     }
 }

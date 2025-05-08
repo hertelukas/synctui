@@ -1,33 +1,224 @@
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use color_eyre::eyre;
 use syncthing_rs::Client;
 use syncthing_rs::types as api;
+use syncthing_rs::types::events::EventType;
+use tokio::sync::broadcast;
+use tokio::sync::mpsc;
 
 use crate::AppError;
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
+pub enum Reload {
+    ID,
+    Configuration,
+    PendingDevices,
+    PendingFolders,
+}
+
+#[derive(Clone, Debug)]
 pub struct State {
-    _client: Client,
-    folders: Vec<Folder>,
-    devices: Vec<Device>,
-    pub events: Vec<api::events::Event>,
-    /// Local Syncthing ID
-    pub id: String,
+    client: Client,
+    inner: Arc<RwLock<InnerState>>,
+    event_tx: broadcast::Sender<api::events::Event>,
+    config_tx: broadcast::Sender<()>,
+    reload_tx: mpsc::Sender<Reload>,
 }
 
 impl State {
     pub fn new(client: Client) -> Self {
-        Self {
-            _client: client,
-            folders: Vec::default(),
-            devices: Vec::default(),
-            events: Vec::default(),
-            id: String::new(),
+        let (event_tx, event_rx) = broadcast::channel(100);
+        let (config_tx, _) = broadcast::channel(100);
+        let (reload_tx, reload_rx) = mpsc::channel(10);
+        let event_tx_clone = event_tx.clone();
+        let client_clone = client.clone();
+
+        let state = Self {
+            client,
+            inner: Arc::new(RwLock::new(InnerState::default())),
+            event_tx,
+            config_tx,
+            reload_tx,
+        };
+
+        // Start listening to events
+        let state_handle = state.clone();
+        tokio::spawn(async move {
+            if let Err(e) = client_clone.get_events(event_tx_clone, true).await {
+                log::error!("failed to get events: {:?}", e);
+                state_handle.set_error(e.into());
+            };
+        });
+
+        // Start reacting to events
+        let state_handle = state.clone();
+        tokio::spawn(async move {
+            Self::handle_event(event_rx, state_handle).await;
+        });
+
+        // Start listening to reloads
+        let state_handle = state.clone();
+        tokio::spawn(async move { Self::listen_to_reload(reload_rx, state_handle).await });
+
+        // Start reloading everything ones.
+        // These blocks all start a thread, so are non-blocking.
+        state.reload(Reload::ID);
+        state.reload(Reload::Configuration);
+        state.reload(Reload::PendingDevices);
+        state.reload(Reload::PendingFolders);
+
+        state
+    }
+
+    pub fn read<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&InnerState) -> R,
+    {
+        let guard = self.inner.read().unwrap();
+        f(&*guard)
+    }
+
+    /// Read only access to the state. External users should never
+    /// have to modify the inner state directly, but should use functions
+    /// in [`State`](Self)
+    fn write<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut InnerState) -> R,
+    {
+        let mut guard = self.inner.write().unwrap();
+        f(&mut *guard)
+    }
+
+    /// Initiate a reload of parts of the state, defined by `Reload`,
+    /// by initiating a request to the API.
+    pub fn reload(&self, reload: Reload) {
+        let reload_tx = self.reload_tx.clone();
+        let state = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = reload_tx.send(reload).await {
+                log::error!("failed to initiate {:?} reload {:?}", reload, e);
+                state.set_error(e.into());
+            }
+        });
+    }
+
+    pub fn set_error(&self, _error: AppError) {}
+
+    pub fn clear_error(&self) {}
+
+    /// Emits an [`Event`](api::events::Event) if a new one arrives
+    pub fn subscribe_to_events(&self) -> broadcast::Receiver<api::events::Event> {
+        self.event_tx.subscribe()
+    }
+
+    /// Emits `()` if the config (everything except events) changes
+    pub fn subscribe_to_config(&self) -> broadcast::Receiver<()> {
+        self.config_tx.subscribe()
+    }
+
+    /// Starts listening to reload commands, and will start reloading parts
+    /// of the configuration.
+    // TODO maybe reload in separate threads, so reloads can be handled faster
+    async fn listen_to_reload(mut reload_rx: mpsc::Receiver<Reload>, state: State) {
+        while let Some(reload) = reload_rx.recv().await {
+            match reload {
+                Reload::Configuration => {
+                    let config = state.client.get_configuration().await;
+                    match config {
+                        Ok(conf) => {
+                            state.write(|state| state.update_from_configuration(conf));
+                        }
+                        Err(e) => {
+                            log::error!("failed to reload config: {:?}", e);
+                            state.set_error(e.into());
+                        }
+                    }
+                }
+                Reload::ID => {
+                    let id = state.client.get_id().await;
+                    match id {
+                        Ok(id) => {
+                            state.write(|state| state.id = id);
+                        }
+                        Err(e) => {
+                            log::error!("failed to load Syncthing ID: {:?}", e);
+                            state.set_error(e.into());
+                        }
+                    }
+                }
+                Reload::PendingDevices => {
+                    let devices = state.client.get_pending_devices().await;
+                    match devices {
+                        Ok(devices) => state.write(|state| state.set_pending_devices(devices)),
+                        Err(e) => log::warn!("failed to reload pending devices: {:?}", e),
+                    }
+                }
+                Reload::PendingFolders => {
+                    let folders = state.client.get_pending_folders().await;
+                    match folders {
+                        Ok(folders) => state.write(|state| state.set_pending_folders(folders)),
+                        Err(e) => log::warn!("failed to reload pending folders: {:?}", e),
+                    }
+                }
+            }
+            // For every case, if we reach this point, the config has changed
+            if let Err(e) = state.config_tx.send(()) {
+                log::warn!(
+                    "could not initiate a config update after a reload has been completed: {:?}",
+                    e
+                );
+            }
         }
     }
 
-    pub fn update_from_configuration(&mut self, configuration: api::config::Configuration) {
+    /// Some events motivate a reload of the configuration. That is done here
+    /// in the background.
+    async fn handle_event(mut event_rx: broadcast::Receiver<api::events::Event>, state: State) {
+        while let Ok(event) = event_rx.recv().await {
+            log::debug!("state is handling event {:?}", event);
+            match event.ty {
+                EventType::ConfigSaved {} => {
+                    if let Err(e) = state.reload_tx.send(Reload::Configuration).await {
+                        log::error!(
+                            "failed to initiate configuration reload due to new saved config: {:?}",
+                            e
+                        );
+                        state.set_error(e.into());
+                    }
+                }
+                EventType::PendingDevicesChanged { .. } => {
+                    if let Err(e) = state.reload_tx.send(Reload::PendingDevices).await {
+                        log::error!("failed to initiate pending devices reload: {:?}", e);
+                        state.set_error(e.into());
+                    }
+                }
+                EventType::PendingFoldersChanged { .. } => {
+                    if let Err(e) = state.reload_tx.send(Reload::PendingFolders).await {
+                        log::error!("failed to initiate pending devices reload: {:?}", e);
+                        state.set_error(e.into());
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct InnerState {
+    folders: Vec<Folder>,
+    devices: Vec<Device>,
+    pub events: Vec<api::events::Event>,
+    pub error: Option<AppError>,
+    /// The device ID of this device
+    pub id: String,
+}
+
+impl InnerState {
+    fn update_from_configuration(&mut self, configuration: api::config::Configuration) {
         self.folders.clear();
         self.devices.clear();
         for device in configuration.devices {
@@ -38,7 +229,7 @@ impl State {
         }
     }
 
-    pub fn set_pending_devices(&mut self, pending_devices: api::cluster::PendingDevices) {
+    fn set_pending_devices(&mut self, pending_devices: api::cluster::PendingDevices) {
         for (device_id, device) in pending_devices.devices.iter() {
             if let Ok(d) = self.get_device(device_id) {
                 if d.state == SharingState::Configured {
@@ -54,7 +245,7 @@ impl State {
         }
     }
 
-    pub fn set_pending_folders(&mut self, pending_folders: api::cluster::PendingFolders) {
+    fn set_pending_folders(&mut self, pending_folders: api::cluster::PendingFolders) {
         for (folder_id, folder) in pending_folders.folders.iter() {
             if let Ok(f) = self.get_folder_mut(folder_id) {
                 // Check if we share with that device
@@ -189,13 +380,13 @@ impl State {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SharingState {
     Configured,
     Pending,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
     pub id: String,
     pub label: String,
@@ -259,7 +450,7 @@ impl Folder {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FolderDeviceSharingDetails {
     /// Whether this folder is shared with that device
     pub state: SharingState,
@@ -282,7 +473,7 @@ impl FolderDeviceSharingDetails {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Device {
     pub id: String,
     pub name: String,

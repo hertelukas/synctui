@@ -2,7 +2,7 @@ use clap::Parser;
 use color_eyre::eyre;
 use syncthing_rs::Client;
 use synctui::{AppConfig, start};
-use tokio::{sync::mpsc, task};
+use tokio::{sync::broadcast, task};
 
 /// CLI wrapper around the syncthing API
 #[derive(Parser, Debug)]
@@ -47,7 +47,7 @@ async fn main() -> eyre::Result<()> {
         client.ping().await?;
         client.get_configuration().await?;
 
-        let (tx_event, mut rx_event) = mpsc::channel(1);
+        let (tx_event, mut rx_event) = broadcast::channel(1);
 
         task::spawn(async move {
             if let Err(error) = client.get_events(tx_event, false).await {
@@ -56,7 +56,7 @@ async fn main() -> eyre::Result<()> {
         });
 
         task::spawn(async move {
-            while let Some(event) = rx_event.recv().await {
+            while let Ok(event) = rx_event.recv().await {
                 println!("{:#?}", event);
             }
         })

@@ -7,8 +7,8 @@ pub struct IDPage {
 }
 
 impl IDPage {
-    pub fn new(id: &str) -> Self {
-        Self { id: id.to_string() }
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into() }
     }
 }
 

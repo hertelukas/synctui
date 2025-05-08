@@ -1,12 +1,12 @@
 use std::sync::{Arc, Mutex};
 
-use log::{debug, error, warn};
+use log::{debug, warn};
 use strum::IntoEnumIterator;
 use syncthing_rs::{
     Client,
     types::events::{Event, EventType},
 };
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::{broadcast, mpsc};
 
 use crate::{AppError, tui::state::State};
 
@@ -14,7 +14,7 @@ use super::{
     input::Message,
     pages::PendingPageState,
     popup::{NewFolderPopup, PendingDevicePopup, PendingShareFolderPopup, Popup},
-    state::{Folder, SharingState},
+    state::{Folder, Reload, SharingState},
 };
 
 #[derive(Default, Debug, strum::EnumIter, PartialEq)]
@@ -60,107 +60,55 @@ impl TryFrom<u32> for CurrentScreen {
 /// Tracks current state of application
 #[derive(Debug)]
 pub struct App {
-    // TODO remove this, the app should not directly need the client,
-    // but go through the state
-    client: Client,
-    rerender_tx: Sender<Message>,
-    reload_tx: Sender<Reload>,
+    rerender_tx: mpsc::Sender<Message>,
     pub running: bool,
     pub current_screen: CurrentScreen,
-    pub state: Arc<Mutex<State>>,
+    pub state: State,
     pub selected_folder: Option<usize>,
     pub selected_device: Option<usize>,
     pub pending_state: PendingPageState,
-    pub error: Arc<Mutex<Option<AppError>>>,
     pub mode: Arc<Mutex<CurrentMode>>,
     pub popup: Option<Box<dyn Popup>>,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum Reload {
-    ID,
-    Configuration,
-    PendingDevices,
-    PendingFolders,
-}
-
 impl App {
-    pub fn new(client: Client, rerender_tx: Sender<Message>) -> Self {
-        let (reload_tx, reload_rx) = mpsc::channel(10);
+    pub fn new(client: Client, rerender_tx: mpsc::Sender<Message>) -> Self {
         let app = App {
-            client: client.clone(),
             rerender_tx,
-            reload_tx: reload_tx.clone(),
             running: true,
             current_screen: CurrentScreen::default(),
-            state: Arc::new(Mutex::new(State::new(client.clone()))),
+            state: State::new(client.clone()),
             selected_folder: None,
             selected_device: None,
             pending_state: PendingPageState::default(),
-            error: Arc::new(Mutex::new(None)),
             mode: Arc::new(Mutex::new(CurrentMode::Normal)),
             popup: None,
         };
 
         // React to events
         let rerender_tx = app.rerender_tx.clone();
-        let state_handle = app.state.clone();
-        let error_handle = app.error.clone();
-        let client_handle = client.clone();
+        let event_rx = app.state.subscribe_to_events();
+        tokio::spawn(async move { Self::handle_event(event_rx, rerender_tx).await });
 
-        let (event_tx, event_rx) = mpsc::channel(10);
-
-        // Start listening to events
-        tokio::spawn(async move {
-            if let Err(e) = client_handle.get_events(event_tx, true).await {
-                error!("failed to get events: {:?}", e);
-                *error_handle.lock().unwrap() = Some(e.into())
-            };
-        });
-
-        let error_handle = app.error.clone();
-        let reload_tx = reload_tx;
-        // Update state.events if we get a new one
-        tokio::spawn(async move {
-            Self::handle_event(state_handle, event_rx, reload_tx, error_handle, rerender_tx).await
-        });
-
-        // Let everyone who ownes a reload_config_tx handle to update the config
+        // Start listen to changes to the config and rerender based on them
         let rerender_tx = app.rerender_tx.clone();
-        let state_handle = app.state.clone();
-        let error_handle = app.error.clone();
-        tokio::spawn(async move {
-            Self::handle_reload(reload_rx, client, state_handle, rerender_tx, error_handle).await
-        });
+        let config_rx = app.state.subscribe_to_config();
+        tokio::spawn(async move { Self::handle_rerender(config_rx, rerender_tx).await });
 
-        app.reload(Reload::ID);
-        app.reload(Reload::Configuration);
-        app.reload(Reload::PendingDevices);
-        app.reload(Reload::PendingFolders);
+        // TODO maybe reload state here again, as the state might already have fully
+        // been fully initialized while we were setting up the listeners
 
         app
     }
 
     /// Runs in the background and reacts to Syncthing events.
     async fn handle_event(
-        state: Arc<Mutex<State>>,
-        mut event_rx: Receiver<Event>,
-        reload_tx: Sender<Reload>,
-        error: Arc<Mutex<Option<AppError>>>,
-        rerender_tx: Sender<Message>,
+        mut event_rx: broadcast::Receiver<Event>,
+        rerender_tx: mpsc::Sender<Message>,
     ) {
-        while let Some(event) = event_rx.recv().await {
+        while let Ok(event) = event_rx.recv().await {
             debug!("Received event: {:?}", event);
             match event.ty {
-                EventType::ConfigSaved {} => {
-                    if let Err(e) = reload_tx.send(Reload::Configuration).await {
-                        error!(
-                            "failed to initiate configuration reload due to new saved config: {:?}",
-                            e
-                        );
-                        *error.lock().unwrap() = Some(e.into());
-                    }
-                }
                 // TODO close popup if the pending device was removed
                 EventType::PendingDevicesChanged {
                     ref added,
@@ -179,10 +127,6 @@ impl App {
                                 // Don't set an error, as this is not really mission critical
                             }
                         }
-                    }
-                    if let Err(e) = reload_tx.send(Reload::PendingDevices).await {
-                        error!("failed to initiate pending devices reload: {:?}", e);
-                        *error.lock().unwrap() = Some(e.into());
                     }
                 }
                 EventType::PendingFoldersChanged {
@@ -205,90 +149,27 @@ impl App {
                             }
                         }
                     }
-                    if let Err(e) = reload_tx.send(Reload::PendingFolders).await {
-                        error!("failed to initiate pending devices reload: {:?}", e);
-                        *error.lock().unwrap() = Some(e.into());
-                    }
                 }
                 _ => {}
             }
-            state.lock().unwrap().events.push(event);
         }
     }
 
-    /// Runs in the background and allows to initiate to asynchrounously start
-    /// fetching data from the API and updating the current state.
-    async fn handle_reload(
-        mut reload_rx: Receiver<Reload>,
-        client: Client,
-        state: Arc<Mutex<State>>,
-        rerender_tx: Sender<Message>,
-        error: Arc<Mutex<Option<AppError>>>,
+    /// Listens to config changes and just initiates a rerender of the UI
+    async fn handle_rerender(
+        mut reload_rx: broadcast::Receiver<()>,
+        rerender_tx: mpsc::Sender<Message>,
     ) {
-        while let Some(reload) = reload_rx.recv().await {
-            match reload {
-                Reload::Configuration => {
-                    let config = client.get_configuration().await;
-                    match config {
-                        Ok(conf) => {
-                            state.lock().unwrap().update_from_configuration(conf);
-                        }
-                        Err(e) => {
-                            error!("failed to reload config: {:?}", e);
-                            *error.lock().unwrap() = Some(e.into());
-                        }
-                    }
-
-                    rerender_tx.send(Message::None).await.unwrap();
-                }
-                Reload::ID => {
-                    let id = client.get_id().await;
-                    match id {
-                        Ok(id) => {
-                            state.lock().unwrap().id = id;
-                        }
-                        Err(e) => {
-                            error!("failed to load Syncthing ID: {:?}", e);
-                            *error.lock().unwrap() = Some(e.into());
-                        }
-                    }
-                    rerender_tx.send(Message::None).await.unwrap();
-                }
-                Reload::PendingDevices => {
-                    let devices = client.get_pending_devices().await;
-                    match devices {
-                        Ok(devices) => state.lock().unwrap().set_pending_devices(devices),
-                        Err(e) => warn!("failed to reload pending devices: {:?}", e),
-                    }
-                    rerender_tx.send(Message::None).await.unwrap();
-                }
-                Reload::PendingFolders => {
-                    let folders = client.get_pending_folders().await;
-                    match folders {
-                        Ok(folders) => state.lock().unwrap().set_pending_folders(folders),
-                        Err(e) => warn!("failed to reload pending folders: {:?}", e),
-                    }
-                    rerender_tx.send(Message::None).await.unwrap();
-                }
-            }
+        while let Ok(_) = reload_rx.recv().await {
+            rerender_tx.send(Message::None).await.unwrap();
         }
-    }
-
-    fn reload(&self, reload: Reload) {
-        let reload_tx = self.reload_tx.clone();
-        let error_handle = self.error.clone();
-        tokio::spawn(async move {
-            if let Err(e) = reload_tx.send(reload).await {
-                error!("failed to initiate {:?} reload {:?}", reload, e);
-                *error_handle.lock().unwrap() = Some(e.into());
-            }
-        });
+        unreachable!("the config sender should never have been dropped")
     }
 
     fn update_folders(&mut self, msg: Message) -> Option<Message> {
         match msg {
             Message::Down => {
-                let len = self.state.lock().unwrap().get_folders().len();
+                let len = self.state.read(|state| state.get_folders().len());
                 if len == 0 {
                     return None;
                 }
@@ -299,7 +180,7 @@ impl App {
                 }
             }
             Message::Up => {
-                let len = self.state.lock().unwrap().get_folders().len();
+                let len = self.state.read(|state| state.get_folders().len());
                 if len == 0 {
                     return None;
                 }
@@ -322,7 +203,7 @@ impl App {
     }
 
     fn update_devices(&mut self, msg: Message) -> Option<Message> {
-        let len = self.state.lock().unwrap().get_other_devices().len();
+        let len = self.state.read(|state| state.get_other_devices().len());
         match msg {
             Message::Down => {
                 if len == 0 {
@@ -351,69 +232,57 @@ impl App {
     }
 
     fn update_pending(&mut self, msg: Message) -> Option<Message> {
-        let devices_len = self.state.lock().unwrap().get_pending_devices().len();
+        let devices_len = self.state.read(|state| state.get_pending_devices().len());
 
-        let folders_len = self.state.lock().unwrap().get_pending_folder_sharer().len();
+        let folders_len = self
+            .state
+            .read(|state| state.get_pending_folder_sharer().len());
 
         self.pending_state.update(&msg, devices_len, folders_len);
         if matches!(msg, Message::Select) {
             // Device Popup
             if let Some(index) = self.pending_state.device_selected() {
-                if let Some(device) = self.state.lock().unwrap().get_pending_devices().get(index) {
-                    self.popup = Some(Box::new(PendingDevicePopup::new(device.id.clone())))
-                };
+                self.state.read(|state| {
+                    if let Some(device) = state.get_pending_devices().get(index) {
+                        self.popup = Some(Box::new(PendingDevicePopup::new(device.id.clone())))
+                    }
+                });
             };
             // Folder Popup
             if let Some(index) = self.pending_state.folder_selected() {
-                let state_handle = self.state.lock().unwrap();
-                if let Some((folder, (device_id, _))) =
-                    state_handle.get_pending_folder_sharer().get(index)
-                {
-                    // Only need to share, folder exists already locally
-                    if folder.state == SharingState::Configured {
-                        self.popup = Some(Box::new(PendingShareFolderPopup::new(
-                            folder.id.clone(),
-                            device_id.to_string(),
-                        )))
-                    } else {
-                        unimplemented!("new (unknown) folder sharing");
+                self.state.read(|state| {
+                    if let Some((folder, (device_id, _))) =
+                        state.get_pending_folder_sharer().get(index)
+                    {
+                        // Only need to share, folder exists already locally
+                        if folder.state == SharingState::Configured {
+                            self.popup = Some(Box::new(PendingShareFolderPopup::new(
+                                folder.id.clone(),
+                                device_id.to_string(),
+                            )))
+                        } else {
+                            unimplemented!("new (unknown) folder sharing");
+                        }
                     }
-                }
+                });
             }
         };
         None
     }
 
     fn handle_new_folder(&mut self, folder: Folder) -> Option<Message> {
-        // Raise an error if we have a duplicate id
+        // Raise an error if we have a duplicate id.
+        // Probably, this should also be done in the state
         if self
             .state
-            .lock()
-            .unwrap()
-            .get_folders()
-            .iter()
-            .any(|f| f.id == folder.id)
+            .read(|state| state.get_folder(&folder.id).is_ok())
         {
-            *self.error.lock().unwrap() = Some(AppError::DuplicateFolderID);
+            self.state.set_error(AppError::DuplicateFolderID);
             return None;
         }
 
         // TODO maybe check that path is valid
-
-        let _reload_tx = self.rerender_tx.clone();
-        let _client = self.client.clone();
-        let _error_handle = self.error.clone();
-        tokio::spawn(async move {
-            // TODO this should be done by the state, so we don't have
-            // to care about updating the state etc.
-            todo!("in state");
-            // if let Err(e) = client.post_folder(folder.into()).await {
-            //     error!("failed to post new folder: {:?}", e);
-            //     *error_handle.lock().unwrap() = Some(e.into());
-            // }
-            // reload_tx.send(Message::None).await.unwrap();
-        });
-        None
+        todo!("add new folder to state (and API)");
     }
 
     pub fn update(&mut self, msg: Message) -> Option<Message> {
@@ -427,32 +296,15 @@ impl App {
             }
             Message::AcceptDevice(ref _device) => {
                 self.popup = None;
-                let _client = self.client.clone();
-                let _error_handle = self.error.clone();
-                tokio::spawn(async move {
-                    // TODO do this in the state to handle updating correctly
-                    todo!();
-                    // if let Err(e) = client.add_device(device.into()).await {
-                    //     error!("failed to add new device: {:?}", e);
-                    //     *error_handle.lock().unwrap() = Some(e);
-                    // }
-                });
+                todo!("add new device in state");
             }
             Message::IgnoreDevice(_) => {
                 self.popup = None;
                 todo!("add device to ignore list");
             }
-            Message::DismissDevice(ref device) => {
+            Message::DismissDevice(ref _device) => {
                 self.popup = None;
-                let client = self.client.clone();
-                let error_handle = self.error.clone();
-                let device = device.to_string();
-                tokio::spawn(async move {
-                    if let Err(e) = client.delete_pending_device(&device).await {
-                        error!("failed to delete pending device: {:?}", e);
-                        *error_handle.lock().unwrap() = Some(e.into());
-                    }
-                });
+                todo!("dismiss device in state by calling delete_pending_device on client");
             }
             _ => {}
         }
@@ -483,21 +335,14 @@ impl App {
                 }
             }
             Message::Reload => {
-                self.reload(Reload::Configuration);
+                self.state.reload(Reload::Configuration);
             }
             Message::NewPendingDevice(ref device) => {
                 self.popup = Some(Box::new(PendingDevicePopup::new(device.id.clone())));
             }
             Message::NewPendingFolder(ref folder_id, ref device_id) => {
                 // Folder already exists on our machine, just share
-                if self
-                    .state
-                    .lock()
-                    .unwrap()
-                    .get_folders()
-                    .iter()
-                    .any(|f| f.id == *folder_id)
-                {
+                if self.state.read(|state| state.get_folder(folder_id).is_ok()) {
                     self.popup = Some(Box::new(PendingShareFolderPopup::new(
                         folder_id.clone(),
                         device_id.to_string(),

@@ -1,4 +1,4 @@
-use crate::tui::Reload;
+use crate::tui::state::Reload;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {

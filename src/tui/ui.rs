@@ -14,30 +14,31 @@ use super::{
 
 pub fn ui(frame: &mut Frame, app: &App) {
     // If we have an error, show only that
-    if let Some(error) = &*app.error.lock().unwrap() {
-        let popup_block =
-            create_popup_block(app, "Error".to_string()).style(Style::default().fg(Color::Red));
+    app.state.read(|state| {
+        if let Some(error) = &state.error {
+            let popup_block =
+                create_popup_block(app, "Error".to_string()).style(Style::default().fg(Color::Red));
 
-        let error_text = Text::styled(error.to_string(), Style::default().fg(Color::default()));
-        let error_paragraph = Paragraph::new(error_text)
-            .block(popup_block)
-            .alignment(ratatui::layout::Alignment::Center)
-            .wrap(Wrap { trim: false }); // Do not cut off whn over edge
+            let error_text = Text::styled(error.to_string(), Style::default().fg(Color::default()));
+            let error_paragraph = Paragraph::new(error_text)
+                .block(popup_block)
+                .alignment(ratatui::layout::Alignment::Center)
+                .wrap(Wrap { trim: false }); // Do not cut off whn over edge
 
-        let area = centered_rect(50, 50, frame.area());
-        frame.render_widget(error_paragraph, area);
+            let area = centered_rect(50, 50, frame.area());
+            frame.render_widget(error_paragraph, area);
 
-        return;
-    }
+            return;
+        }
+    });
 
     let background = create_background(app);
     let inner_area = background.inner(frame.area());
     match app.current_screen {
         CurrentScreen::Folders => FoldersPage::new(app).render(inner_area, frame.buffer_mut()),
         CurrentScreen::Devices => DevicesPage::new(app).render(inner_area, frame.buffer_mut()),
-        CurrentScreen::ID => {
-            IDPage::new(&app.state.lock().unwrap().id).render(inner_area, frame.buffer_mut())
-        }
+        CurrentScreen::ID => IDPage::new(app.state.read(|state| state.id.clone()))
+            .render(inner_area, frame.buffer_mut()),
         CurrentScreen::Pending => PendingPage::new(app).render(inner_area, frame.buffer_mut()),
     };
 

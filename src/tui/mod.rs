@@ -18,10 +18,9 @@ use ratatui::{
 };
 
 mod app;
-pub mod state;
-pub use app::Reload;
 mod input;
 mod popup;
+pub mod state;
 mod ui;
 
 mod pages {

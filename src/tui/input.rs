@@ -11,7 +11,7 @@ use super::{
     state::{Device, Folder},
 };
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Message {
     // Vim
     Insert,

@@ -17,8 +17,8 @@ use crate::tui::state::{Folder, State};
 
 pub trait Popup: std::fmt::Debug {
     /// Updates the state of the popup. If Some(Quit) is returned, the popup gets destroyed
-    fn update(&mut self, msg: Message, state: Arc<Mutex<State>>) -> Option<Message>;
-    fn render(&self, frame: &mut Frame, state: Arc<Mutex<State>>);
+    fn update(&mut self, msg: Message, state: State) -> Option<Message>;
+    fn render(&self, frame: &mut Frame, state: State);
     fn create_popup_block(&self, title: String) -> Block {
         let block = Block::default()
             .title_top(Line::from(format!("| {} |", title)).centered())
@@ -122,7 +122,7 @@ pub struct NewFolderPopup {
     path_input: TextBox,
     focus: NewFolderFocus,
     mode: Arc<Mutex<CurrentMode>>,
-    state: Arc<Mutex<State>>,
+    state: State,
     selected_devices: HashSet<String>,
 }
 
@@ -146,7 +146,7 @@ impl NewFolderFocus {
 }
 
 impl NewFolderPopup {
-    pub fn new(mode: Arc<Mutex<CurrentMode>>, state: Arc<Mutex<State>>) -> Self {
+    pub fn new(mode: Arc<Mutex<CurrentMode>>, state: State) -> Self {
         Self {
             id_input: TextBox::default(),
             label_input: TextBox::default(),
@@ -159,7 +159,7 @@ impl NewFolderPopup {
     }
 
     fn select_next(&mut self) {
-        let devices_len = self.state.lock().unwrap().get_other_devices().len();
+        let devices_len = self.state.read(|state| state.get_other_devices().len());
         match self.focus {
             NewFolderFocus::Path => self.focus = NewFolderFocus::Label,
             NewFolderFocus::Label => self.focus = NewFolderFocus::Id,
@@ -193,7 +193,7 @@ impl NewFolderPopup {
                 }
             }
             NewFolderFocus::SubmitButton => {
-                let devices_len = self.state.lock().unwrap().get_other_devices().len();
+                let devices_len = self.state.read(|state| state.get_other_devices().len());
                 if devices_len > 0 {
                     self.focus = NewFolderFocus::Device(devices_len - 1);
                 } else {
@@ -215,7 +215,7 @@ impl NewFolderPopup {
 }
 
 impl Popup for NewFolderPopup {
-    fn update(&mut self, msg: Message, _: Arc<Mutex<State>>) -> Option<Message> {
+    fn update(&mut self, msg: Message, _: State) -> Option<Message> {
         let input = match self.focus {
             NewFolderFocus::Id => Some(&mut self.id_input),
             NewFolderFocus::Label => Some(&mut self.label_input),
@@ -252,11 +252,14 @@ impl Popup for NewFolderPopup {
             Message::Select => match self.focus {
                 NewFolderFocus::SubmitButton => return self.submit(),
                 NewFolderFocus::Device(i) => {
-                    if let Some(device) = self.state.lock().unwrap().get_other_devices().get(i) {
-                        if self.selected_devices.contains(&device.id) {
-                            self.selected_devices.remove(&device.id);
+                    if let Some(device_id) = self
+                        .state
+                        .read(|state| state.get_other_devices().get(i).map(|d| d.id.clone()))
+                    {
+                        if self.selected_devices.contains(&device_id) {
+                            self.selected_devices.remove(&device_id);
                         } else {
-                            self.selected_devices.insert(device.id.clone());
+                            self.selected_devices.insert(device_id);
                         }
                     }
                 }
@@ -268,7 +271,7 @@ impl Popup for NewFolderPopup {
         None
     }
 
-    fn render(&self, frame: &mut Frame, _state: Arc<Mutex<State>>) {
+    fn render(&self, frame: &mut Frame, _state: State) {
         let block = self.create_popup_block("New Folder".to_string());
         let vertical = Layout::vertical([
             Constraint::Length(1),
@@ -309,30 +312,29 @@ impl Popup for NewFolderPopup {
             })
             .block(Block::bordered().title("ID"));
 
-        let devices_line: Line = self
-            .state
-            .lock()
-            .unwrap()
-            .get_other_devices()
-            .iter()
-            .enumerate()
-            .map(|(i, device)| {
-                let style = if self.focus == NewFolderFocus::Device(i) {
-                    Style::new().fg(Color::Blue)
-                } else {
-                    Style::new()
-                };
-                let selected_char = if self.selected_devices.contains(&device.id) {
-                    "✓"
-                } else {
-                    "☐"
-                };
-                Span::styled(
-                    format!("| {} {} ", selected_char, device.name.clone()),
-                    style,
-                )
-            })
-            .collect();
+        let devices_line: Line = self.state.read(|state| {
+            state
+                .get_other_devices()
+                .iter()
+                .enumerate()
+                .map(|(i, device)| {
+                    let style = if self.focus == NewFolderFocus::Device(i) {
+                        Style::new().fg(Color::Blue)
+                    } else {
+                        Style::new()
+                    };
+                    let selected_char = if self.selected_devices.contains(&device.id) {
+                        "✓"
+                    } else {
+                        "☐"
+                    };
+                    Span::styled(
+                        format!("| {} {} ", selected_char, device.name.clone()),
+                        style,
+                    )
+                })
+                .collect()
+        });
 
         let devices_select = Paragraph::new(devices_line);
 
@@ -419,7 +421,7 @@ impl PendingDevicePopup {
 }
 
 impl Popup for PendingDevicePopup {
-    fn update(&mut self, msg: Message, _state: Arc<Mutex<State>>) -> Option<Message> {
+    fn update(&mut self, msg: Message, _state: State) -> Option<Message> {
         match msg {
             Message::Quit => return Some(Message::Quit),
             Message::FocusNext | Message::Right => self.focus.next(),
@@ -430,7 +432,7 @@ impl Popup for PendingDevicePopup {
         None
     }
 
-    fn render(&self, frame: &mut Frame, _state: Arc<Mutex<State>>) {
+    fn render(&self, frame: &mut Frame, _state: State) {
         let block = self.create_popup_block("Pending Device".to_string());
         let vertical = Layout::vertical([Constraint::Length(2), Constraint::Length(1)]);
 
@@ -487,11 +489,11 @@ pub struct PendingAddFolderPopup {}
 impl PendingAddFolderPopup {}
 
 impl Popup for PendingAddFolderPopup {
-    fn update(&mut self, _msg: Message, _state: Arc<Mutex<State>>) -> Option<Message> {
+    fn update(&mut self, _msg: Message, _state: State) -> Option<Message> {
         todo!()
     }
 
-    fn render(&self, _frame: &mut Frame, _state: Arc<Mutex<State>>) {
+    fn render(&self, _frame: &mut Frame, _state: State) {
         todo!()
     }
 }
@@ -519,7 +521,7 @@ impl PendingShareFolderPopup {
 }
 
 impl Popup for PendingShareFolderPopup {
-    fn update(&mut self, msg: Message, _state: Arc<Mutex<State>>) -> Option<Message> {
+    fn update(&mut self, msg: Message, _state: State) -> Option<Message> {
         match msg {
             Message::Quit => return Some(Message::Quit),
             Message::FocusNext | Message::Right => self.focus.next(),
@@ -530,7 +532,7 @@ impl Popup for PendingShareFolderPopup {
         None
     }
 
-    fn render(&self, frame: &mut Frame, state: Arc<Mutex<State>>) {
+    fn render(&self, frame: &mut Frame, state: State) {
         let block = self.create_popup_block("Share Folder".to_string());
         let vertical = Layout::vertical([Constraint::Length(2), Constraint::Length(1)]);
 
@@ -540,9 +542,8 @@ impl Popup for PendingShareFolderPopup {
             horizontal: 1,
             vertical: 1,
         }));
-        let line = {
+        let line = state.read(|state| {
             // TODO maybe show device label too
-            let state = state.lock().unwrap();
             let folder = state
                 .get_folder(&self.folder_id)
                 .expect("folder to be shared does not exist on this device.");
@@ -550,7 +551,7 @@ impl Popup for PendingShareFolderPopup {
                 "Share {} ({}) with {}",
                 folder.label, folder.id, self.device_id
             ))
-        };
+        });
         let selected_style = Style::new().bg(Color::DarkGray);
 
         let buttons_line: Line = vec![
