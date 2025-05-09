@@ -129,9 +129,9 @@ impl Widget for &PendingPage<'_> {
         // Devices
         let devices_list: Vec<_> = self.app.state.read(|state| {
             state
-                .get_folders()
+                .get_pending_devices()
                 .iter()
-                .map(|f| f.label.clone())
+                .map(|d| d.name.clone())
                 .collect()
         });
 
