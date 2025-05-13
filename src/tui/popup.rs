@@ -116,6 +116,13 @@ impl TextBox {
     }
 }
 
+impl From<String> for TextBox {
+    fn from(value: String) -> Self {
+        let index = value.chars().count();
+        Self { text: value, index }
+    }
+}
+
 #[derive(Debug)]
 pub struct NewFolderPopup {
     id_input: TextBox,
@@ -153,6 +160,27 @@ impl NewFolderPopup {
             mode,
             state,
             selected_devices: HashSet::new(),
+        }
+    }
+
+    /// This can be used if accepting a folder from another device
+    pub fn new_from_device(
+        folder_label: impl Into<String>,
+        folder_id: impl Into<String>,
+        device_id: impl Into<String>,
+        mode: Arc<Mutex<CurrentMode>>,
+        state: State,
+    ) -> Self {
+        let mut selected_devices = HashSet::new();
+        selected_devices.insert(device_id.into());
+        Self {
+            id_input: folder_id.into().into(),
+            label_input: folder_label.into().into(),
+            path_input: TextBox::default(),
+            focus: NewFolderFocus::default(),
+            mode,
+            state,
+            selected_devices,
         }
     }
 
@@ -489,21 +517,6 @@ impl Popup for PendingDevicePopup {
     }
 }
 
-#[derive(Debug)]
-pub struct PendingAddFolderPopup {}
-
-impl PendingAddFolderPopup {}
-
-impl Popup for PendingAddFolderPopup {
-    fn update(&mut self, _msg: Message, _state: State) -> Option<Message> {
-        todo!()
-    }
-
-    fn render(&self, _frame: &mut Frame, _state: State) {
-        todo!()
-    }
-}
-
 /// Popup to share an already existing folder with a new device
 #[derive(Debug)]
 pub struct PendingShareFolderPopup {
@@ -559,7 +572,7 @@ impl Popup for PendingShareFolderPopup {
             // TODO maybe show device label too
             let folder = state
                 .get_folder(&self.folder_id)
-                .expect("folder to be shared does not exist on this device.");
+                .expect("folder to be shared does not exist on this device");
             Line::from(format!(
                 "Share {} ({}) with {}",
                 folder.label, folder.id, self.device_id

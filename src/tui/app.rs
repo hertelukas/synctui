@@ -142,6 +142,7 @@ impl App {
                         if let Some(first) = added.first() {
                             if let Err(e) = rerender_tx
                                 .send(Message::NewPendingFolder(
+                                    first.folder_label.clone(),
                                     first.folder_id.clone(),
                                     first.device_id.clone(),
                                 ))
@@ -261,13 +262,19 @@ impl App {
                 self.state.read(|state| {
                     if let Some((device_id, folder)) = state.get_pending_folders().get(index) {
                         // Only need to share, folder exists already locally
-                        if state.get_device(device_id).is_ok() {
+                        if state.get_folder(folder.get_id()).is_ok() {
                             self.popup = Some(Box::new(PendingShareFolderPopup::new(
                                 folder.get_id().to_string(),
                                 device_id.to_string(),
                             )))
                         } else {
-                            unimplemented!("new (unknown) folder sharing");
+                            self.popup = Some(Box::new(NewFolderPopup::new_from_device(
+                                folder.get_label().clone().unwrap_or("".to_string()),
+                                folder.get_id().to_string(),
+                                device_id.to_string(),
+                                self.mode.clone(),
+                                self.state.clone(),
+                            )))
                         }
                     }
                 });
@@ -351,7 +358,7 @@ impl App {
             Message::NewPendingDevice(ref device) => {
                 self.popup = Some(Box::new(PendingDevicePopup::new(device.clone())));
             }
-            Message::NewPendingFolder(ref folder_id, ref device_id) => {
+            Message::NewPendingFolder(ref folder_label, ref folder_id, ref device_id) => {
                 // Folder already exists on our machine, just share
                 if self.state.read(|state| state.get_folder(folder_id).is_ok()) {
                     self.popup = Some(Box::new(PendingShareFolderPopup::new(
@@ -359,7 +366,13 @@ impl App {
                         device_id.to_string(),
                     )))
                 } else {
-                    unimplemented!("handle new folder")
+                    self.popup = Some(Box::new(NewFolderPopup::new_from_device(
+                        folder_label,
+                        folder_id,
+                        device_id,
+                        self.mode.clone(),
+                        self.state.clone(),
+                    )))
                 }
             }
             _ => {}
