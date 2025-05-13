@@ -11,7 +11,7 @@
 > - Not affiliated with the Syncthing Foundation.
 > - Contributions are welcome!
 
---
+---
 
 **Synctui** lets you control [Syncthing](https://syncthing.net) from your terminal — no need to open a browser. Perfect for headless setups like servers or Raspberry Pis. Skip the port forwarding and get syncing.
 
@@ -19,14 +19,17 @@ It already supports most essential features, so you can manage devices and folde
 
 ## 🚀 Installation
 1. **Install Rust and Cargo** (if you haven't already):
-
-`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+``` bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+```
 
 2. **Configure Synctui:**
 Create a config.toml in your system's default config directory.
 On Linux, for example:
 
-`~/.config/synctui/config.toml`
+``` bash
+~/.config/synctui/config.toml`
+```
 
 With this content:
 ``` toml
@@ -35,7 +38,9 @@ api-key="your-api-key"
 
 To find your API key (on Linux):
 
-`cat ~/.config/syncthing/config.xml | grep apikey`
+``` bash
+cat ~/.config/syncthing/config.xml | grep apikey`
+```
 
 3. **Run the app:**
 
