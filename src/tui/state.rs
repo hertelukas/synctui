@@ -259,6 +259,23 @@ impl State {
             // We don't need to update the config, the event should handle that
         });
     }
+
+    pub fn dismiss_device(&self, device_id: impl Into<String>) {
+        let state = self.clone();
+        let device_id = device_id.into();
+        tokio::spawn(async move {
+            if let Err(e) = state
+                .client
+                .dismiss_pending_device(&device_id)
+                .await
+            {
+                log::error!("failed to dismiss device to api: {:?}", e);
+                state.set_error(e.into());
+            }
+            // We don't need to update the config, the event should handle that
+        });
+    }
+
 }
 
 #[derive(Debug, Default)]

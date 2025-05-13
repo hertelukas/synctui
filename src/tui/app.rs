@@ -312,9 +312,9 @@ impl App {
                 self.popup = None;
                 todo!("add device to ignore list");
             }
-            Message::DismissDevice(ref _device) => {
+            Message::DismissDevice(ref device_id) => {
                 self.popup = None;
-                todo!("dismiss device in state by calling delete_pending_device on client");
+                self.state.dismiss_device(device_id);
             }
             Message::DismissFolder(ref folder_id, ref device_id) => {
                 self.popup = None;
