@@ -215,18 +215,24 @@ impl State {
     /// # Errors
     ///
     /// Returns `UnknownDevice` if no such device exists as pending device.
-    pub fn accept_device(&self, device_id: &str) -> Result<(), AppError> {
-        let device = self.read(|state| state.get_pending_device(device_id).cloned())?;
-        let state = self.clone();
-        tokio::spawn(async move {
-            if let Err(e) = state.client.add_device(device).await {
-                log::error!("failed to add device to api: {:?}", e);
-                state.set_error(e.into());
-            } else {
-                state.reload(Reload::Configuration);
+    pub fn accept_device(&self, device_id: &str) {
+        match self.read(|state| state.get_pending_device(device_id).cloned()) {
+            Ok(device) => {
+                let state = self.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = state.client.add_device(device).await {
+                        log::error!("failed to add device to api: {:?}", e);
+                        state.set_error(e.into());
+                    } else {
+                        state.reload(Reload::Configuration);
+                    }
+                });
             }
-        });
-        Ok(())
+            Err(e) => {
+                log::error!("failed to accept device: {:?}", e);
+                self.set_error(e);
+            }
+        }
     }
 
     /// Add a new folder
@@ -264,18 +270,13 @@ impl State {
         let state = self.clone();
         let device_id = device_id.into();
         tokio::spawn(async move {
-            if let Err(e) = state
-                .client
-                .dismiss_pending_device(&device_id)
-                .await
-            {
+            if let Err(e) = state.client.dismiss_pending_device(&device_id).await {
                 log::error!("failed to dismiss device to api: {:?}", e);
                 state.set_error(e.into());
             }
             // We don't need to update the config, the event should handle that
         });
     }
-
 }
 
 #[derive(Debug, Default)]

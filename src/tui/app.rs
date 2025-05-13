@@ -303,10 +303,7 @@ impl App {
             }
             Message::AcceptDevice(ref device) => {
                 self.popup = None;
-                if let Err(e) = self.state.accept_device(device) {
-                    log::error!("state could not accept device: {:?}", e);
-                    self.state.set_error(e);
-                }
+                self.state.accept_device(device);
             }
             Message::IgnoreDevice(_) => {
                 self.popup = None;
