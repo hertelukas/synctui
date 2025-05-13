@@ -237,8 +237,26 @@ impl State {
                 log::error!("failed to add folder to api: {:?}", e);
                 state.set_error(e.into());
             } else {
+                // TODO We don't need to update the config, the event should handle that
                 state.reload(Reload::Configuration);
             }
+        });
+    }
+
+    pub fn dismiss_folder(&self, folder_id: impl Into<String>, device_id: impl Into<String>) {
+        let state = self.clone();
+        let folder_id = folder_id.into();
+        let device_id = device_id.into();
+        tokio::spawn(async move {
+            if let Err(e) = state
+                .client
+                .dismiss_pending_folder(&folder_id, Some(&device_id))
+                .await
+            {
+                log::error!("failed to dismiss folder to api: {:?}", e);
+                state.set_error(e.into());
+            }
+            // We don't need to update the config, the event should handle that
         });
     }
 }

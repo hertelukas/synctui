@@ -42,6 +42,7 @@ pub enum Message {
     DismissDevice(String),
     // PendingFolder
     NewPendingFolder(String, String),
+    DismissFolder(String, String),
     None,
 }
 

@@ -131,7 +131,7 @@ impl App {
                         }
                     }
                     if let Some(_removed) = removed {
-                        todo!("potentially close popup")
+                        // TODO close popup if we have one with a removed device opened
                     }
                 }
                 EventType::PendingFoldersChanged {
@@ -155,7 +155,7 @@ impl App {
                         }
                     }
                     if let Some(_removed) = removed {
-                        todo!("potentially close popup")
+                        // TODO close popup if we have one with a removed folder opened
                     }
                 }
                 _ => {}
@@ -315,6 +315,10 @@ impl App {
             Message::DismissDevice(ref _device) => {
                 self.popup = None;
                 todo!("dismiss device in state by calling delete_pending_device on client");
+            }
+            Message::DismissFolder(ref folder_id, ref device_id) => {
+                self.popup = None;
+                self.state.dismiss_folder(folder_id, device_id);
             }
             _ => {}
         }
