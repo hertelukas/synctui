@@ -20,15 +20,16 @@ It already supports most essential features, so you can manage devices and folde
 ## 🚀 Installation
 1. **Install Rust and Cargo** (if you haven't already):
 ``` bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
 2. **Configure Synctui:**
+
 Create a config.toml in your system's default config directory.
 On Linux, for example:
 
 ``` bash
-~/.config/synctui/config.toml`
+~/.config/synctui/config.toml
 ```
 
 With this content:
@@ -39,12 +40,14 @@ api-key="your-api-key"
 To find your API key (on Linux):
 
 ``` bash
-cat ~/.config/syncthing/config.xml | grep apikey`
+cat ~/.config/syncthing/config.xml | grep apikey
 ```
 
 3. **Run the app:**
 
-`cargo run --release`
+``` bash
+cargo run --release
+```
 
 ## 📌 Roadmap
 - [x] Accept incoming devices
