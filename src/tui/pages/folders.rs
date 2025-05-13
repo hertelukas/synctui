@@ -56,14 +56,17 @@ impl Widget for &FoldersPage<'_> {
                     folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
                     folder_info.push(ListItem::new(Line::from(format!(
                         "Shared with {} device{}",
-                        folder.get_sharer().len(),
-                        if folder.get_sharer().len() == 1 {
+                        folder.get_sharer().len() - 1,
+                        if folder.get_sharer().len() == 2 {
                             ""
                         } else {
                             "s"
                         }
                     ))));
                     for (device_id, _) in &folder.get_sharer() {
+                        if &&state.id == device_id {
+                            continue;
+                        }
                         if let Ok(device) = state.get_device(device_id) {
                             folder_info.push(ListItem::new(Line::from(device.name.clone())));
                         }
