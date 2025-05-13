@@ -7,7 +7,7 @@ use ratatui::{
 
 use ratatui::widgets::Widget;
 
-use crate::tui::{app::App, input::Message, state::SharingState};
+use crate::tui::{app::App, input::Message};
 
 pub struct PendingPage<'a> {
     app: &'a App,
@@ -131,7 +131,12 @@ impl Widget for &PendingPage<'_> {
             state
                 .get_pending_devices()
                 .iter()
-                .map(|d| d.name.clone())
+                .map(|d| {
+                    d.get_name()
+                        .clone()
+                        .unwrap_or("<unknwon name>".to_string())
+                        .clone()
+                })
                 .collect()
         });
 
@@ -147,29 +152,33 @@ impl Widget for &PendingPage<'_> {
         // Folders
         let folders_list: Vec<_> = self.app.state.read(|state| {
             state
-                .get_pending_folder_sharer()
+                .get_pending_folders()
                 .iter()
-                .map(|(folder, (device_id, share_details))| {
-                    let device_name = if let Ok(device) = state.get_device(device_id) {
-                        device.name.clone()
-                    } else {
-                        "Unknown device".to_string()
+                .map(|(device_id, folder)| {
+                    let device_name = match state.get_device(device_id) {
+                        Ok(d) => &d.name,
+                        Err(_) => "<unknown device>",
                     };
-                    let (text, label) = if folder.state == SharingState::Configured {
-                        ("[Share]", folder.label.as_str())
-                    } else {
-                        (
-                            "[Add]",
-                            share_details.remote_label.as_deref().unwrap_or("<unknown>"),
-                        )
+
+                    let text = match state.get_folder(folder.get_id()) {
+                        Ok(_) => "[Share]",
+                        Err(_) => "[Add]",
                     };
+                    let label = folder
+                        .get_label()
+                        .clone()
+                        .unwrap_or("<unknwon folder>".to_string());
                     Line::from(format!(
                         "{} \"{}\" ({}) - {}",
-                        text, label, folder.id, device_name
+                        text,
+                        label,
+                        folder.get_id(),
+                        device_name
                     ))
                 })
                 .collect()
         });
+
         let folders_list = List::new(folders_list)
             .block(Block::default().title(Span::styled("Pending Folders", Style::new().bold())))
             .highlight_style(Style::new().bg(Color::DarkGray));

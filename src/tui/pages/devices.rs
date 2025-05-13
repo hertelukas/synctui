@@ -49,7 +49,7 @@ impl Widget for &DevicesPage<'_> {
         if let Some(device_index) = self.app.selected_device {
             if let Some(device_name) = self.app.state.read(|state| {
                 state
-                    .get_devices()
+                    .get_other_devices()
                     .get(device_index)
                     .map(|d| d.name.clone())
             }) {

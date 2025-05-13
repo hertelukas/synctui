@@ -5,6 +5,8 @@ use std::sync::RwLock;
 use color_eyre::eyre;
 use syncthing_rs::Client;
 use syncthing_rs::types as api;
+use syncthing_rs::types::config::NewDeviceConfiguration;
+use syncthing_rs::types::config::NewFolderConfiguration;
 use syncthing_rs::types::events::EventType;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
@@ -205,12 +207,38 @@ impl State {
             }
         }
     }
+
+    /// Accept device `device_id` in the background. This function is
+    /// non-blocking, and will emit a config update once the changes have
+    /// been applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns `UnknownDevice` if no such device exists as pending device.
+    pub fn accept_device(&self, device_id: &str) -> Result<(), AppError> {
+        let device = self.read(|state| state.get_pending_device(device_id).cloned())?;
+        let state = self.clone();
+        let self_handle = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = state.client.add_device(device).await {
+                log::error!("failed to add to api: {:?}", e);
+                state.set_error(e.into());
+            } else {
+                self_handle.reload(Reload::Configuration);
+                // Don't care if updating subscriber fails
+                let _ = state.config_tx.send(());
+            }
+        });
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default)]
 pub struct InnerState {
     folders: Vec<Folder>,
     devices: Vec<Device>,
+    pending_folders: Vec<(String, NewFolderConfiguration)>,
+    pending_devices: Vec<NewDeviceConfiguration>,
     pub events: Vec<api::events::Event>,
     pub error: Option<AppError>,
     /// The device ID of this device
@@ -230,59 +258,31 @@ impl InnerState {
     }
 
     fn set_pending_devices(&mut self, pending_devices: api::cluster::PendingDevices) {
+        self.pending_devices.clear();
         for (device_id, device) in pending_devices.devices.iter() {
-            if let Ok(d) = self.get_device(device_id) {
-                if d.state == SharingState::Configured {
-                    log::warn!("pending device {:?} is already configured", d);
-                }
-            } else {
-                log::debug!("adding new pending device {:?}", device);
-                self.devices.push(Device::new_pending(
-                    device_id.to_string(),
-                    device.name.clone(),
-                ));
-            }
+            self.pending_devices
+                .push(NewDeviceConfiguration::new(device_id.to_string()).name(device.name.clone()));
         }
     }
 
     fn set_pending_folders(&mut self, pending_folders: api::cluster::PendingFolders) {
+        self.pending_folders.clear();
         for (folder_id, folder) in pending_folders.folders.iter() {
-            if let Ok(f) = self.get_folder_mut(folder_id) {
-                // Check if we share with that device
-                for (device_id, _) in folder.offered_by.iter() {
-                    if let Some(sharing_details) = f.shared_with.get(device_id) {
-                        if sharing_details.state == SharingState::Configured {
-                            log::warn!("pending folder {:?} is already configured", folder);
-                        }
-                    } else {
-                        log::debug!(
-                            "new pending device {:?} on existing folder {:?}",
-                            device_id,
-                            folder
-                        );
-                        f.shared_with.insert(
-                            device_id.clone(),
-                            FolderDeviceSharingDetails::new_pending(None),
-                        );
-                    }
-                }
-            } else {
-                self.folders.push(Folder::new_pending(
-                    folder_id.to_string(),
-                    folder
-                        .offered_by
-                        .iter()
-                        .map(|(k, v)| (k.to_string(), v.label.clone()))
-                        .collect(),
+            for (introducer_id, offerer) in folder.offered_by.clone() {
+                self.pending_folders.push((
+                    introducer_id,
+                    // TODO find a cleaner way to handle the unknown path at this point
+                    NewFolderConfiguration::new(folder_id.to_string(), "?".to_string())
+                        .label(offerer.label),
                 ));
             }
         }
 
-        log::debug!("Pending folders: {:#?}", self.get_pending_folder_sharer());
+        log::debug!("Pending folders: {:#?}", self.get_pending_folders());
         log::debug!("Folders: {:#?}", self.get_folders());
     }
 
-    /// All devices, sorted by name
+    /// All configured devices, sorted by name
     pub fn get_devices(&self) -> Vec<&Device> {
         let mut res: Vec<&Device> = self.devices.iter().collect();
 
@@ -290,6 +290,7 @@ impl InnerState {
         res
     }
 
+    /// Get a configured device with id `device_id`
     pub fn get_device(&self, device_id: &str) -> eyre::Result<&Device, AppError> {
         self.devices
             .iter()
@@ -325,44 +326,41 @@ impl InnerState {
     }
 
     /// All devices we have not yet configured
-    pub fn get_pending_devices(&self) -> Vec<&Device> {
-        self.get_devices()
-            .into_iter()
-            .filter(|device| device.state == SharingState::Pending)
-            .collect()
+    pub fn get_pending_devices(&self) -> Vec<&NewDeviceConfiguration> {
+        let mut res: Vec<&NewDeviceConfiguration> = self.pending_devices.iter().collect();
+
+        // TODO lowercase
+        res.sort_by(|a, b| a.get_name().cmp(b.get_name()));
+        res
+    }
+
+    // Get device which has not yet been configured
+    pub fn get_pending_device(
+        &self,
+        device_id: &str,
+    ) -> eyre::Result<&NewDeviceConfiguration, AppError> {
+        self.pending_devices
+            .iter()
+            .find(|d| d.get_device_id() == device_id)
+            .ok_or(AppError::UnknownDevice)
     }
 
     /// All folders, sorted by name and then ID
     pub fn get_folders(&self) -> Vec<&Folder> {
         let mut res: Vec<&Folder> = self.folders.iter().collect();
 
+        // TODO id
         res.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
         res
     }
 
-    pub fn get_pending_folders(&self) -> Vec<&Folder> {
-        self.get_folders()
-            .into_iter()
-            .filter(|folder| folder.state == SharingState::Pending)
-            .collect()
-    }
+    pub fn get_pending_folders(&self) -> Vec<&(String, NewFolderConfiguration)> {
+        let mut res: Vec<_> = self.pending_folders.iter().collect();
 
-    /// Returns all folders which have have someone who wants
-    /// to share the folder with us. This means that a folder
-    /// might appear multiple times, if multiple devices want
-    /// to share it with us.
-    pub fn get_pending_folder_sharer(
-        &self,
-    ) -> Vec<(&Folder, (&String, &FolderDeviceSharingDetails))> {
-        self.get_folders()
-            .into_iter()
-            .flat_map(|f| {
-                f.get_pending_sharer()
-                    .into_iter()
-                    .map(move |s| (f, s))
-                    .collect::<Vec<_>>()
-            })
-            .collect()
+        // TODO lowercase & id
+        // BUG this will return different orderings with respect to devices
+        res.sort_by(|(_, a), (_, b)| a.get_label().cmp(b.get_label()));
+        res
     }
 
     pub fn get_folder(&self, folder_id: &str) -> eyre::Result<&Folder, AppError> {
@@ -380,19 +378,12 @@ impl InnerState {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SharingState {
-    Configured,
-    Pending,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
     pub id: String,
     pub label: String,
     pub path: String, // or PathBuf?
     /// Whether the folder is in our configuration or only on a remote device
-    pub state: SharingState,
     pub shared_with: HashMap<String, FolderDeviceSharingDetails>,
 }
 
@@ -406,24 +397,6 @@ impl Folder {
             id,
             label,
             path,
-            state: SharingState::Configured,
-            shared_with: hm,
-        }
-    }
-
-    pub fn new_pending(id: String, devices: Vec<(String, String)>) -> Self {
-        let mut hm = HashMap::new();
-        for (device_id, remote_label) in devices {
-            hm.insert(
-                device_id,
-                FolderDeviceSharingDetails::new_pending(Some(remote_label)),
-            );
-        }
-        Self {
-            id,
-            label: String::new(),
-            path: String::new(),
-            state: SharingState::Pending,
             shared_with: hm,
         }
     }
@@ -434,40 +407,21 @@ impl Folder {
         to_sort.sort_by(|(a, _), (b, _)| a.cmp(b));
         to_sort
     }
-
-    pub fn get_pending_sharer(&self) -> Vec<(&String, &FolderDeviceSharingDetails)> {
-        self.get_sharer()
-            .into_iter()
-            .filter(|(_, details)| details.state == SharingState::Pending)
-            .collect()
-    }
-
-    pub fn get_configured_sharer(&self) -> Vec<(&String, &FolderDeviceSharingDetails)> {
-        self.get_sharer()
-            .into_iter()
-            .filter(|(_, details)| details.state == SharingState::Configured)
-            .collect()
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FolderDeviceSharingDetails {
     /// Whether this folder is shared with that device
-    pub state: SharingState,
     pub remote_label: Option<String>,
 }
 
 impl FolderDeviceSharingDetails {
     pub fn new_configured() -> Self {
-        Self {
-            state: SharingState::Configured,
-            remote_label: None,
-        }
+        Self { remote_label: None }
     }
 
     pub fn new_pending(label: Option<String>) -> Self {
         Self {
-            state: SharingState::Pending,
             remote_label: label,
         }
     }
@@ -477,16 +431,11 @@ impl FolderDeviceSharingDetails {
 pub struct Device {
     pub id: String,
     pub name: String,
-    pub state: SharingState,
 }
 
 impl Device {
-    pub fn new_pending(id: String, name: String) -> Self {
-        Self {
-            id,
-            name,
-            state: SharingState::Pending,
-        }
+    pub fn new(id: String, name: String) -> Self {
+        Self { id, name }
     }
 }
 
@@ -495,17 +444,6 @@ impl From<api::config::DeviceConfiguration> for Device {
         Self {
             id: value.device_id,
             name: value.name,
-            state: SharingState::Configured,
-        }
-    }
-}
-
-impl From<api::events::AddedPendingDeviceChanged> for Device {
-    fn from(value: api::events::AddedPendingDeviceChanged) -> Self {
-        Self {
-            id: value.device_id,
-            name: value.name,
-            state: SharingState::Pending,
         }
     }
 }
@@ -520,7 +458,6 @@ impl From<api::config::FolderConfiguration> for Folder {
             id: value.id,
             label: value.label,
             path: value.path,
-            state: SharingState::Configured,
             shared_with: hm,
         }
     }
@@ -537,7 +474,6 @@ impl From<api::events::AddedPendingFolderChanged> for Folder {
             id: value.folder_id,
             label: String::new(),
             path: String::new(),
-            state: SharingState::Pending,
             shared_with: hm,
         }
     }

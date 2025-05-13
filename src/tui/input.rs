@@ -6,10 +6,7 @@ use ratatui::crossterm::{
     event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind},
 };
 
-use super::{
-    app::CurrentMode,
-    state::{Device, Folder},
-};
+use super::{app::CurrentMode, state::Folder};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Message {
@@ -38,7 +35,7 @@ pub enum Message {
     // NewFolder
     NewFolder(Folder),
     // PendingDevice
-    NewPendingDevice(Device),
+    NewPendingDevice(String),
     AcceptDevice(String),
     IgnoreDevice(String),
     DismissDevice(String),

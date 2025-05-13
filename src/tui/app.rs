@@ -14,7 +14,7 @@ use super::{
     input::Message,
     pages::PendingPageState,
     popup::{NewFolderPopup, PendingDevicePopup, PendingShareFolderPopup, Popup},
-    state::{Folder, Reload, SharingState},
+    state::{Folder, Reload},
 };
 
 #[derive(Default, Debug, strum::EnumIter, PartialEq)]
@@ -116,7 +116,7 @@ impl App {
                     if let Some(added) = added {
                         if let Some(first) = added.first() {
                             if let Err(e) = rerender_tx
-                                .send(Message::NewPendingDevice(first.clone().into()))
+                                .send(Message::NewPendingDevice(first.device_id.clone()))
                                 .await
                             {
                                 warn!(
@@ -239,9 +239,7 @@ impl App {
     fn update_pending(&mut self, msg: Message) -> Option<Message> {
         let devices_len = self.state.read(|state| state.get_pending_devices().len());
 
-        let folders_len = self
-            .state
-            .read(|state| state.get_pending_folder_sharer().len());
+        let folders_len = self.state.read(|state| state.get_pending_folders().len());
 
         self.pending_state.update(&msg, devices_len, folders_len);
         if matches!(msg, Message::Select) {
@@ -249,20 +247,20 @@ impl App {
             if let Some(index) = self.pending_state.device_selected() {
                 self.state.read(|state| {
                     if let Some(device) = state.get_pending_devices().get(index) {
-                        self.popup = Some(Box::new(PendingDevicePopup::new(device.id.clone())))
+                        self.popup = Some(Box::new(PendingDevicePopup::new(
+                            device.get_device_id().clone(),
+                        )))
                     }
                 });
             };
             // Folder Popup
             if let Some(index) = self.pending_state.folder_selected() {
                 self.state.read(|state| {
-                    if let Some((folder, (device_id, _))) =
-                        state.get_pending_folder_sharer().get(index)
-                    {
+                    if let Some((device_id, folder)) = state.get_pending_folders().get(index) {
                         // Only need to share, folder exists already locally
-                        if folder.state == SharingState::Configured {
+                        if state.get_device(device_id).is_ok() {
                             self.popup = Some(Box::new(PendingShareFolderPopup::new(
-                                folder.id.clone(),
+                                folder.get_id().to_string(),
                                 device_id.to_string(),
                             )))
                         } else {
@@ -299,9 +297,12 @@ impl App {
                 self.popup = None;
                 return self.handle_new_folder(folder);
             }
-            Message::AcceptDevice(ref _device) => {
+            Message::AcceptDevice(ref device) => {
                 self.popup = None;
-                todo!("add new device in state");
+                if let Err(e) = self.state.accept_device(device) {
+                    log::error!("state could not accept device: {:?}", e);
+                    self.state.set_error(e);
+                }
             }
             Message::IgnoreDevice(_) => {
                 self.popup = None;
@@ -343,7 +344,7 @@ impl App {
                 self.state.reload(Reload::Configuration);
             }
             Message::NewPendingDevice(ref device) => {
-                self.popup = Some(Box::new(PendingDevicePopup::new(device.id.clone())));
+                self.popup = Some(Box::new(PendingDevicePopup::new(device.clone())));
             }
             Message::NewPendingFolder(ref folder_id, ref device_id) => {
                 // Folder already exists on our machine, just share
