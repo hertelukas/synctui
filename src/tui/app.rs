@@ -4,7 +4,10 @@ use log::{debug, warn};
 use strum::IntoEnumIterator;
 use syncthing_rs::{
     Client,
-    types::events::{Event, EventType},
+    types::{
+        config::NewFolderConfiguration,
+        events::{Event, EventType},
+    },
 };
 use tokio::sync::{broadcast, mpsc};
 
@@ -14,7 +17,7 @@ use super::{
     input::Message,
     pages::PendingPageState,
     popup::{NewFolderPopup, PendingDevicePopup, PendingShareFolderPopup, Popup},
-    state::{Folder, Reload},
+    state::Reload,
 };
 
 #[derive(Default, Debug, strum::EnumIter, PartialEq)]
@@ -273,19 +276,20 @@ impl App {
         None
     }
 
-    fn handle_new_folder(&mut self, folder: Folder) -> Option<Message> {
+    fn handle_new_folder(&mut self, folder: NewFolderConfiguration) -> Option<Message> {
         // Raise an error if we have a duplicate id.
         // Probably, this should also be done in the state
         if self
             .state
-            .read(|state| state.get_folder(&folder.id).is_ok())
+            .read(|state| state.get_folder(folder.get_id()).is_ok())
         {
             self.state.set_error(AppError::DuplicateFolderID);
             return None;
         }
 
         // TODO maybe check that path is valid
-        todo!("add new folder to state (and API)");
+        self.state.add_foler(folder);
+        None
     }
 
     pub fn update(&mut self, msg: Message) -> Option<Message> {
@@ -295,7 +299,7 @@ impl App {
             Message::Normal => *self.mode.lock().unwrap() = CurrentMode::Normal,
             Message::NewFolder(folder) => {
                 self.popup = None;
-                return self.handle_new_folder(folder);
+                return self.handle_new_folder(*folder);
             }
             Message::AcceptDevice(ref device) => {
                 self.popup = None;

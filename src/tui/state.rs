@@ -218,18 +218,28 @@ impl State {
     pub fn accept_device(&self, device_id: &str) -> Result<(), AppError> {
         let device = self.read(|state| state.get_pending_device(device_id).cloned())?;
         let state = self.clone();
-        let self_handle = self.clone();
         tokio::spawn(async move {
             if let Err(e) = state.client.add_device(device).await {
-                log::error!("failed to add to api: {:?}", e);
+                log::error!("failed to add device to api: {:?}", e);
                 state.set_error(e.into());
             } else {
-                self_handle.reload(Reload::Configuration);
-                // Don't care if updating subscriber fails
-                let _ = state.config_tx.send(());
+                state.reload(Reload::Configuration);
             }
         });
         Ok(())
+    }
+
+    /// Add a new folder
+    pub fn add_foler(&self, folder: NewFolderConfiguration) {
+        let state = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = state.client.add_folder(folder).await {
+                log::error!("failed to add folder to api: {:?}", e);
+                state.set_error(e.into());
+            } else {
+                state.reload(Reload::Configuration);
+            }
+        });
     }
 }
 

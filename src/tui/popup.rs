@@ -10,10 +10,11 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Widget},
 };
+use syncthing_rs::types::config::{FolderDeviceConfiguration, NewFolderConfiguration};
 
 use super::{app::CurrentMode, input::Message};
 
-use crate::tui::state::{Folder, State};
+use crate::tui::state::State;
 
 pub trait Popup: std::fmt::Debug {
     /// Updates the state of the popup. If Some(Quit) is returned, the popup gets destroyed
@@ -202,11 +203,19 @@ impl NewFolderPopup {
     }
     fn submit(&mut self) -> Option<Message> {
         *self.mode.lock().unwrap() = CurrentMode::Normal;
-        Some(Message::NewFolder(Folder::new(
-            self.id_input.text.clone(),
-            self.label_input.text.clone(),
-            self.path_input.text.clone(),
-            self.selected_devices.iter().cloned().collect(),
+        let devices: Vec<FolderDeviceConfiguration> = self
+            .selected_devices
+            .iter()
+            .map(|d| FolderDeviceConfiguration {
+                device_id: d.to_string(),
+                introduced_by: "".to_string(),
+                encryption_password: "".to_string(),
+            })
+            .collect();
+        Some(Message::NewFolder(Box::new(
+            NewFolderConfiguration::new(self.id_input.text.clone(), self.path_input.text.clone())
+                .label(self.label_input.text.clone())
+                .devices(devices),
         )))
     }
 }

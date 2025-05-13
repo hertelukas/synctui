@@ -5,8 +5,9 @@ use ratatui::crossterm::{
     self,
     event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind},
 };
+use syncthing_rs::types::config::NewFolderConfiguration;
 
-use super::{app::CurrentMode, state::Folder};
+use super::app::CurrentMode;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Message {
@@ -33,7 +34,7 @@ pub enum Message {
     Submit,
     // Popups
     // NewFolder
-    NewFolder(Folder),
+    NewFolder(Box<NewFolderConfiguration>),
     // PendingDevice
     NewPendingDevice(String),
     AcceptDevice(String),
