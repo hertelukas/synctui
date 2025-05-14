@@ -1,7 +1,7 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph, Widget, Wrap},
 };
@@ -55,7 +55,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
 
 fn create_background(app: &App) -> Block {
     let block = Block::default()
-        .title_top(Line::from("| SyncTUI |").centered())
+        .title_top(Line::from("| SyncTUI |").centered().bold())
         .borders(Borders::ALL);
 
     let mut bottom_string = CurrentScreen::iter()

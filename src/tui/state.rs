@@ -422,6 +422,15 @@ impl InnerState {
             .find(|f| f.id == folder_id)
             .ok_or(AppError::UnknownFolder)
     }
+
+    // Get all folders which are shared with `device_id`. Does not check
+    // if `device_id` actually exists.
+    pub fn get_device_folders(&self, device_id: &str) -> Vec<&Folder> {
+        self.get_folders()
+            .into_iter()
+            .filter(|f| f.get_sharer().iter().any(|(d, _)| d == &device_id))
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -452,6 +461,18 @@ impl Folder {
         let mut to_sort: Vec<_> = self.shared_with.iter().collect();
         to_sort.sort_by(|(a, _), (b, _)| a.cmp(b));
         to_sort
+    }
+
+    /// Get all the devices with which this folder is shared, excluding `device_id`.
+    /// This is especially useful for excluding the host.
+    pub fn get_sharer_excluded(
+        &self,
+        device_id: &str,
+    ) -> Vec<(&String, &FolderDeviceSharingDetails)> {
+        self.get_sharer()
+            .into_iter()
+            .filter(|(d, _)| d != &device_id)
+            .collect()
     }
 }
 

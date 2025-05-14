@@ -1,8 +1,8 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
-    text::Line,
-    widgets::{Block, Borders, List, ListState, StatefulWidget, Widget},
+    style::{Color, Style, Stylize},
+    text::{Line, Span},
+    widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget},
 };
 
 use crate::tui::app::App;
@@ -47,17 +47,53 @@ impl Widget for &DevicesPage<'_> {
         StatefulWidget::render(list, chunks[0], buf, &mut list_state);
 
         if let Some(device_index) = self.app.selected_device {
-            if let Some(device_name) = self.app.state.read(|state| {
-                state
-                    .get_other_devices()
-                    .get(device_index)
-                    .map(|d| d.name.clone())
-            }) {
-                let block = Block::default()
-                    .title_top(Line::from(format!("| {} |", device_name)).centered())
-                    .borders(Borders::ALL);
-                block.render(chunks[1], buf);
-            }
+            self.app.state.read(|state| {
+                if let Some(device) = state.get_other_devices().get(device_index) {
+                    let block = Block::default()
+                        .title_top(Line::from(format!("| {} |", device.name)).centered().bold())
+                        .borders(Borders::ALL);
+
+                    // Device information
+                    let mut device_info = Vec::<ListItem>::new();
+                    device_info.push(ListItem::new(Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled("ID", Style::default().bold()),
+                        Span::raw(format!("      : {}", device.id)),
+                    ])));
+                    device_info.push(ListItem::new(Line::from("")));
+
+                    let device_folders = state.get_device_folders(&device.id).len();
+                    let s_suffix = if device_folders == 1 { "" } else { "s" };
+
+                    device_info.push(ListItem::new(Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled("Sharing", Style::default().bold()),
+                        Span::raw(" : "),
+                        Span::styled(format!("{}", device_folders), Style::default().bold()),
+                        Span::raw(format!(" Folder{}", s_suffix)),
+                    ])));
+
+                    for i in 0..device_folders {
+                        if let Some(folder) = state.get_device_folders(&device.id).get(i) {
+                            let ident = if i < device_folders - 1 {
+                                "├─"
+                            } else {
+                                "└─"
+                            };
+                            device_info.push(ListItem::new(Line::from(format!(
+                                "  {} {}",
+                                ident, folder.label
+                            ))));
+                        }
+                    }
+
+                    let inner_area = block.inner(chunks[1]);
+                    block.render(chunks[1], buf);
+
+                    let list = List::new(device_info);
+                    Widget::render(list, inner_area, buf);
+                }
+            })
         }
     }
 }

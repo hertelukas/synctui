@@ -1,7 +1,7 @@
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Style},
-    text::Line,
+    style::{Color, Style, Stylize},
+    text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget},
 };
 
@@ -48,27 +48,50 @@ impl Widget for &FoldersPage<'_> {
             self.app.state.read(|state| {
                 if let Some(folder) = state.get_folders().get(folder_index) {
                     let block = Block::default()
-                        .title_top(Line::from(format!("| {} |", folder.label)).centered())
+                        .title_top(
+                            Line::from(format!("| {} |", folder.label))
+                                .centered()
+                                .bold(),
+                        )
                         .borders(Borders::ALL);
                     // Folder information
                     let mut folder_info = Vec::<ListItem>::new();
-                    folder_info.push(ListItem::new(Line::from(format!("ID: {}", folder.id))));
-                    folder_info.push(ListItem::new(Line::from(format!("Path: {}", folder.path))));
-                    folder_info.push(ListItem::new(Line::from(format!(
-                        "Shared with {} device{}",
-                        folder.get_sharer().len() - 1,
-                        if folder.get_sharer().len() == 2 {
-                            ""
-                        } else {
-                            "s"
-                        }
-                    ))));
-                    for (device_id, _) in &folder.get_sharer() {
-                        if &&state.id == device_id {
-                            continue;
-                        }
-                        if let Ok(device) = state.get_device(device_id) {
-                            folder_info.push(ListItem::new(Line::from(device.name.clone())));
+                    folder_info.push(ListItem::new(Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled("ID", Style::default().bold()),
+                        Span::raw(format!("          : {}", folder.id)),
+                    ])));
+                    folder_info.push(ListItem::new(Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled("Path", Style::default().bold()),
+                        Span::raw(format!("        : {}", folder.path)),
+                    ])));
+                    folder_info.push(ListItem::new(Line::from("")));
+
+                    let folder_sharer = folder.get_sharer_excluded(&state.id).len();
+                    let s_suffix = if folder_sharer == 1 { "" } else { "s" };
+
+                    folder_info.push(ListItem::new(Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled("Shared with", Style::default().bold()),
+                        Span::raw(" : "),
+                        Span::styled(format!("{}", folder_sharer), Style::default().bold()),
+                        Span::raw(format!(" Device{}", s_suffix)),
+                    ])));
+
+                    for i in 0..folder_sharer {
+                        if let Some((device_id, _)) = folder.get_sharer_excluded(&state.id).get(i) {
+                            let ident = if i < folder_sharer - 1 {
+                                "├─"
+                            } else {
+                                "└─"
+                            };
+                            if let Ok(device) = state.get_device(device_id) {
+                                folder_info.push(ListItem::new(Line::from(format!(
+                                    "  {} {}",
+                                    ident, device.name
+                                ))));
+                            }
                         }
                     }
                     let inner_area = block.inner(chunks[1]);
