@@ -2075,8 +2075,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 [[package]]
 name = "tui-qrcode"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8677aecf40fbe9ad2275e7f597ef3ad1f8f3f6f71e00f17017251329301a1193"
+source = "git+https://github.com/joshka/tui-widgets.git#34b86db83399ca9a2269c033422c2b6d54fb28de"
 dependencies = [
  "color-eyre",
  "qrcode",

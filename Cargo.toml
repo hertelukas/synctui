@@ -22,4 +22,4 @@ syncthing-rs = { git = "https://github.com/hertelukas/syncthing-rs.git" }
 thiserror = "2.0.12"
 tokio = { version = "1", features = ["full"] }
 toml = "0.8.20"
-tui-qrcode = { version = "0.1.1", default-features = false }
+tui-qrcode = { git = "https://github.com/joshka/tui-widgets.git", default-features = false }
