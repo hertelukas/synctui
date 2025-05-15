@@ -182,7 +182,7 @@ impl State {
         while let Ok(event) = event_rx.recv().await {
             log::debug!("state is handling event {:?}", event);
             match event.ty {
-                EventType::ConfigSaved {} => {
+                EventType::ConfigSaved { .. } => {
                     if let Err(e) = state.reload_tx.send(Reload::Configuration).await {
                         log::error!(
                             "failed to initiate configuration reload due to new saved config: {:?}",
