@@ -284,10 +284,12 @@ impl Popup for NewFolderPopup {
             Message::Select => match self.focus {
                 NewFolderFocus::SubmitButton => return self.submit(),
                 NewFolderFocus::Device(i) => {
-                    if let Some(device_id) = self
-                        .state
-                        .read(|state| state.get_other_devices().get(i).map(|d| d.id.clone()))
-                    {
+                    if let Some(device_id) = self.state.read(|state| {
+                        state
+                            .get_other_devices()
+                            .get(i)
+                            .map(|d| d.config.device_id.clone())
+                    }) {
                         if self.selected_devices.contains(&device_id) {
                             self.selected_devices.remove(&device_id);
                         } else {
@@ -355,13 +357,14 @@ impl Popup for NewFolderPopup {
                     } else {
                         Style::new()
                     };
-                    let selected_char = if self.selected_devices.contains(&device.id) {
+                    let selected_char = if self.selected_devices.contains(&device.config.device_id)
+                    {
                         "✓"
                     } else {
                         "☐"
                     };
                     Span::styled(
-                        format!("| {} {} ", selected_char, device.name.clone()),
+                        format!("| {} {} ", selected_char, device.config.name.clone()),
                         style,
                     )
                 })
@@ -573,7 +576,7 @@ impl Popup for PendingShareFolderPopup {
                 .expect("folder to be shared does not exist on this device");
             Line::from(format!(
                 "Share {} ({}) with {}",
-                folder.folder.label, folder.folder.id, self.device_id
+                folder.config.label, folder.config.id, self.device_id
             ))
         });
         let selected_style = Style::new().bg(Color::DarkGray);

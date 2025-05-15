@@ -34,7 +34,7 @@ impl Widget for &FoldersPage<'_> {
             state
                 .get_folders()
                 .iter()
-                .map(|f| f.folder.label.clone())
+                .map(|f| f.config.label.clone())
                 .collect()
         });
 
@@ -49,7 +49,7 @@ impl Widget for &FoldersPage<'_> {
                 if let Some(folder) = state.get_folders().get(folder_index) {
                     let block = Block::default()
                         .title_top(
-                            Line::from(format!("| {} |", folder.folder.label))
+                            Line::from(format!("| {} |", folder.config.label))
                                 .centered()
                                 .bold(),
                         )
@@ -59,12 +59,12 @@ impl Widget for &FoldersPage<'_> {
                     folder_info.push(ListItem::new(Line::from(vec![
                         Span::raw(" "),
                         Span::styled("ID", Style::default().bold()),
-                        Span::raw(format!("          : {}", folder.folder.id)),
+                        Span::raw(format!("          : {}", folder.config.id)),
                     ])));
                     folder_info.push(ListItem::new(Line::from(vec![
                         Span::raw(" "),
                         Span::styled("Path", Style::default().bold()),
-                        Span::raw(format!("        : {}", folder.folder.path)),
+                        Span::raw(format!("        : {}", folder.config.path)),
                     ])));
                     folder_info.push(ListItem::new(Line::from("")));
 
@@ -89,7 +89,7 @@ impl Widget for &FoldersPage<'_> {
                             if let Ok(device) = state.get_device(device_id) {
                                 folder_info.push(ListItem::new(Line::from(format!(
                                     "  {} {}",
-                                    ident, device.name
+                                    ident, device.config.name
                                 ))));
                             }
                         }

@@ -156,7 +156,7 @@ impl Widget for &PendingPage<'_> {
                 .iter()
                 .map(|(device_id, folder)| {
                     let device_name = match state.get_device(device_id) {
-                        Ok(d) => &d.name,
+                        Ok(d) => &d.config.name,
                         Err(_) => "<unknown device>",
                     };
 

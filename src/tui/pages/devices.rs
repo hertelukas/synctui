@@ -37,7 +37,7 @@ impl Widget for &DevicesPage<'_> {
             state
                 .get_other_devices()
                 .iter()
-                .map(|d| d.name.clone())
+                .map(|d| d.config.name.clone())
                 .collect()
         });
 
@@ -50,7 +50,11 @@ impl Widget for &DevicesPage<'_> {
             self.app.state.read(|state| {
                 if let Some(device) = state.get_other_devices().get(device_index) {
                     let block = Block::default()
-                        .title_top(Line::from(format!("| {} |", device.name)).centered().bold())
+                        .title_top(
+                            Line::from(format!("| {} |", device.config.name))
+                                .centered()
+                                .bold(),
+                        )
                         .borders(Borders::ALL);
 
                     // Device information
@@ -58,11 +62,11 @@ impl Widget for &DevicesPage<'_> {
                     device_info.push(ListItem::new(Line::from(vec![
                         Span::raw(" "),
                         Span::styled("ID", Style::default().bold()),
-                        Span::raw(format!("      : {}", device.id)),
+                        Span::raw(format!("      : {}", device.config.device_id)),
                     ])));
                     device_info.push(ListItem::new(Line::from("")));
 
-                    let device_folders = state.get_device_folders(&device.id).len();
+                    let device_folders = state.get_device_folders(&device.config.device_id).len();
                     let s_suffix = if device_folders == 1 { "" } else { "s" };
 
                     device_info.push(ListItem::new(Line::from(vec![
@@ -74,7 +78,9 @@ impl Widget for &DevicesPage<'_> {
                     ])));
 
                     for i in 0..device_folders {
-                        if let Some(folder) = state.get_device_folders(&device.id).get(i) {
+                        if let Some(folder) =
+                            state.get_device_folders(&device.config.device_id).get(i)
+                        {
                             let ident = if i < device_folders - 1 {
                                 "├─"
                             } else {
@@ -82,7 +88,7 @@ impl Widget for &DevicesPage<'_> {
                             };
                             device_info.push(ListItem::new(Line::from(format!(
                                 "  {} {}",
-                                ident, folder.folder.label
+                                ident, folder.config.label
                             ))));
                         }
                     }

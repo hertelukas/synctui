@@ -4,6 +4,7 @@ use std::sync::RwLock;
 use color_eyre::eyre;
 use syncthing_rs::Client;
 use syncthing_rs::types as api;
+use syncthing_rs::types::config::DeviceConfiguration;
 use syncthing_rs::types::config::FolderConfiguration;
 use syncthing_rs::types::config::NewDeviceConfiguration;
 use syncthing_rs::types::config::NewFolderConfiguration;
@@ -332,7 +333,12 @@ impl InnerState {
     pub fn get_devices(&self) -> Vec<&Device> {
         let mut res: Vec<&Device> = self.devices.iter().collect();
 
-        res.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        res.sort_by(|a, b| {
+            a.config
+                .name
+                .to_lowercase()
+                .cmp(&b.config.name.to_lowercase())
+        });
         res
     }
 
@@ -340,7 +346,7 @@ impl InnerState {
     pub fn get_device(&self, device_id: &str) -> eyre::Result<&Device, AppError> {
         self.devices
             .iter()
-            .find(|d| d.id == device_id)
+            .find(|d| d.config.device_id == device_id)
             .ok_or(AppError::UnknownDevice)
     }
 
@@ -348,7 +354,7 @@ impl InnerState {
     pub fn get_other_devices(&self) -> Vec<&Device> {
         self.get_devices()
             .into_iter()
-            .filter(|device| device.id != self.id)
+            .filter(|device| device.config.device_id != self.id)
             .collect()
     }
 
@@ -360,13 +366,13 @@ impl InnerState {
         let folder = self
             .folders
             .iter()
-            .find(|f| f.folder.id == folder_id)
+            .find(|f| f.config.id == folder_id)
             .ok_or(AppError::UnknownFolder)?;
 
         Ok(self
             .get_other_devices()
             .iter()
-            .filter(|device| folder.get_sharer().contains(&&device.id))
+            .filter(|device| folder.get_sharer().contains(&&device.config.device_id))
             .copied()
             .collect())
     }
@@ -397,10 +403,10 @@ impl InnerState {
 
         // TODO id
         res.sort_by(|a, b| {
-            a.folder
+            a.config
                 .label
                 .to_lowercase()
-                .cmp(&b.folder.label.to_lowercase())
+                .cmp(&b.config.label.to_lowercase())
         });
         res
     }
@@ -417,14 +423,14 @@ impl InnerState {
     pub fn get_folder(&self, folder_id: &str) -> eyre::Result<&Folder, AppError> {
         self.folders
             .iter()
-            .find(|f| f.folder.id == folder_id)
+            .find(|f| f.config.id == folder_id)
             .ok_or(AppError::UnknownFolder)
     }
 
     pub fn get_folder_mut(&mut self, folder_id: &str) -> eyre::Result<&mut Folder, AppError> {
         self.folders
             .iter_mut()
-            .find(|f| f.folder.id == folder_id)
+            .find(|f| f.config.id == folder_id)
             .ok_or(AppError::UnknownFolder)
     }
 
@@ -440,14 +446,14 @@ impl InnerState {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
-    pub folder: FolderConfiguration,
+    pub config: FolderConfiguration,
 }
 
 impl Folder {
     /// Get all the devices with which this folder is shared, sorted by device id
     pub fn get_sharer(&self) -> Vec<&String> {
         let mut to_sort: Vec<_> = self
-            .folder
+            .config
             .devices
             .iter()
             .map(|folder_device_configuration| &folder_device_configuration.device_id)
@@ -468,27 +474,21 @@ impl Folder {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Device {
-    pub id: String,
-    pub name: String,
-}
-
-impl Device {
-    pub fn new(id: String, name: String) -> Self {
-        Self { id, name }
-    }
+    pub config: DeviceConfiguration,
+    pub connected: bool,
 }
 
 impl From<api::config::DeviceConfiguration> for Device {
     fn from(value: api::config::DeviceConfiguration) -> Self {
         Self {
-            id: value.device_id,
-            name: value.name,
+            config: value,
+            connected: false,
         }
     }
 }
 
 impl From<api::config::FolderConfiguration> for Folder {
     fn from(folder: api::config::FolderConfiguration) -> Self {
-        Self { folder }
+        Self { config: folder }
     }
 }
