@@ -23,7 +23,12 @@ It already supports most essential features, so you can manage devices and folde
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-2. **Configure Synctui:**
+2. **Install Synctui**
+```bash
+cargo install --git https://github.com/hertelukas/synctui
+```
+
+3. **Configure Synctui:**
 
 Create a config.toml in your system's default config directory.
 On Linux, for example:
@@ -43,10 +48,10 @@ To find your API key (on Linux):
 cat ~/.config/syncthing/config.xml | grep apikey
 ```
 
-3. **Run the app:**
+4. **Run the app:**
 
 ``` bash
-cargo run --release
+synctui
 ```
 
 ## 📌 Roadmap
