@@ -82,7 +82,7 @@ impl Widget for &DevicesPage<'_> {
                             };
                             device_info.push(ListItem::new(Line::from(format!(
                                 "  {} {}",
-                                ident, folder.label
+                                ident, folder.folder.label
                             ))));
                         }
                     }

@@ -1,10 +1,10 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::RwLock;
 
 use color_eyre::eyre;
 use syncthing_rs::Client;
 use syncthing_rs::types as api;
+use syncthing_rs::types::config::FolderConfiguration;
 use syncthing_rs::types::config::NewDeviceConfiguration;
 use syncthing_rs::types::config::NewFolderConfiguration;
 use syncthing_rs::types::events::EventType;
@@ -360,13 +360,13 @@ impl InnerState {
         let folder = self
             .folders
             .iter()
-            .find(|f| f.id == folder_id)
+            .find(|f| f.folder.id == folder_id)
             .ok_or(AppError::UnknownFolder)?;
 
         Ok(self
             .get_other_devices()
             .iter()
-            .filter(|device| folder.shared_with.contains_key(&device.id))
+            .filter(|device| folder.get_sharer().contains(&&device.id))
             .copied()
             .collect())
     }
@@ -396,7 +396,12 @@ impl InnerState {
         let mut res: Vec<&Folder> = self.folders.iter().collect();
 
         // TODO id
-        res.sort_by(|a, b| a.label.to_lowercase().cmp(&b.label.to_lowercase()));
+        res.sort_by(|a, b| {
+            a.folder
+                .label
+                .to_lowercase()
+                .cmp(&b.folder.label.to_lowercase())
+        });
         res
     }
 
@@ -412,14 +417,14 @@ impl InnerState {
     pub fn get_folder(&self, folder_id: &str) -> eyre::Result<&Folder, AppError> {
         self.folders
             .iter()
-            .find(|f| f.id == folder_id)
+            .find(|f| f.folder.id == folder_id)
             .ok_or(AppError::UnknownFolder)
     }
 
     pub fn get_folder_mut(&mut self, folder_id: &str) -> eyre::Result<&mut Folder, AppError> {
         self.folders
             .iter_mut()
-            .find(|f| f.id == folder_id)
+            .find(|f| f.folder.id == folder_id)
             .ok_or(AppError::UnknownFolder)
     }
 
@@ -428,69 +433,36 @@ impl InnerState {
     pub fn get_device_folders(&self, device_id: &str) -> Vec<&Folder> {
         self.get_folders()
             .into_iter()
-            .filter(|f| f.get_sharer().iter().any(|(d, _)| d == &device_id))
+            .filter(|f| f.get_sharer().iter().any(|d| d == &device_id))
             .collect()
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
-    pub id: String,
-    pub label: String,
-    pub path: String, // or PathBuf?
-    /// Whether the folder is in our configuration or only on a remote device
-    pub shared_with: HashMap<String, FolderDeviceSharingDetails>,
+    pub folder: FolderConfiguration,
 }
 
 impl Folder {
-    pub fn new(id: String, label: String, path: String, devices: Vec<String>) -> Self {
-        let mut hm = HashMap::new();
-        for d in devices {
-            hm.insert(d, FolderDeviceSharingDetails::new_configured());
-        }
-        Self {
-            id,
-            label,
-            path,
-            shared_with: hm,
-        }
-    }
-
     /// Get all the devices with which this folder is shared, sorted by device id
-    pub fn get_sharer(&self) -> Vec<(&String, &FolderDeviceSharingDetails)> {
-        let mut to_sort: Vec<_> = self.shared_with.iter().collect();
-        to_sort.sort_by(|(a, _), (b, _)| a.cmp(b));
+    pub fn get_sharer(&self) -> Vec<&String> {
+        let mut to_sort: Vec<_> = self
+            .folder
+            .devices
+            .iter()
+            .map(|folder_device_configuration| &folder_device_configuration.device_id)
+            .collect();
+        to_sort.sort();
         to_sort
     }
 
     /// Get all the devices with which this folder is shared, excluding `device_id`.
     /// This is especially useful for excluding the host.
-    pub fn get_sharer_excluded(
-        &self,
-        device_id: &str,
-    ) -> Vec<(&String, &FolderDeviceSharingDetails)> {
+    pub fn get_sharer_excluded(&self, device_id: &str) -> Vec<&String> {
         self.get_sharer()
             .into_iter()
-            .filter(|(d, _)| d != &device_id)
+            .filter(|d| d != &device_id)
             .collect()
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct FolderDeviceSharingDetails {
-    /// Whether this folder is shared with that device
-    pub remote_label: Option<String>,
-}
-
-impl FolderDeviceSharingDetails {
-    pub fn new_configured() -> Self {
-        Self { remote_label: None }
-    }
-
-    pub fn new_pending(label: Option<String>) -> Self {
-        Self {
-            remote_label: label,
-        }
     }
 }
 
@@ -516,41 +488,7 @@ impl From<api::config::DeviceConfiguration> for Device {
 }
 
 impl From<api::config::FolderConfiguration> for Folder {
-    fn from(value: api::config::FolderConfiguration) -> Self {
-        let mut hm = HashMap::new();
-        for d in value.devices {
-            hm.insert(d.device_id, FolderDeviceSharingDetails::new_configured());
-        }
-        Self {
-            id: value.id,
-            label: value.label,
-            path: value.path,
-            shared_with: hm,
-        }
-    }
-}
-
-impl From<api::events::AddedPendingFolderChanged> for Folder {
-    fn from(value: api::events::AddedPendingFolderChanged) -> Self {
-        let mut hm = HashMap::new();
-        hm.insert(
-            value.device_id,
-            FolderDeviceSharingDetails::new_pending(Some(value.folder_label)),
-        );
-        Self {
-            id: value.folder_id,
-            label: String::new(),
-            path: String::new(),
-            shared_with: hm,
-        }
-    }
-}
-
-impl From<Folder> for api::config::FolderConfiguration {
-    fn from(_value: Folder) -> Self {
-        todo!(
-            "this function should never be needed, just update
-single fields"
-        )
+    fn from(folder: api::config::FolderConfiguration) -> Self {
+        Self { folder }
     }
 }

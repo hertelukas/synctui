@@ -575,7 +575,7 @@ impl Popup for PendingShareFolderPopup {
                 .expect("folder to be shared does not exist on this device");
             Line::from(format!(
                 "Share {} ({}) with {}",
-                folder.label, folder.id, self.device_id
+                folder.folder.label, folder.folder.id, self.device_id
             ))
         });
         let selected_style = Style::new().bg(Color::DarkGray);

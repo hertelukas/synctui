@@ -34,7 +34,7 @@ impl Widget for &FoldersPage<'_> {
             state
                 .get_folders()
                 .iter()
-                .map(|f| f.label.clone())
+                .map(|f| f.folder.label.clone())
                 .collect()
         });
 
@@ -49,7 +49,7 @@ impl Widget for &FoldersPage<'_> {
                 if let Some(folder) = state.get_folders().get(folder_index) {
                     let block = Block::default()
                         .title_top(
-                            Line::from(format!("| {} |", folder.label))
+                            Line::from(format!("| {} |", folder.folder.label))
                                 .centered()
                                 .bold(),
                         )
@@ -59,12 +59,12 @@ impl Widget for &FoldersPage<'_> {
                     folder_info.push(ListItem::new(Line::from(vec![
                         Span::raw(" "),
                         Span::styled("ID", Style::default().bold()),
-                        Span::raw(format!("          : {}", folder.id)),
+                        Span::raw(format!("          : {}", folder.folder.id)),
                     ])));
                     folder_info.push(ListItem::new(Line::from(vec![
                         Span::raw(" "),
                         Span::styled("Path", Style::default().bold()),
-                        Span::raw(format!("        : {}", folder.path)),
+                        Span::raw(format!("        : {}", folder.folder.path)),
                     ])));
                     folder_info.push(ListItem::new(Line::from("")));
 
@@ -80,7 +80,7 @@ impl Widget for &FoldersPage<'_> {
                     ])));
 
                     for i in 0..folder_sharer {
-                        if let Some((device_id, _)) = folder.get_sharer_excluded(&state.id).get(i) {
+                        if let Some(device_id) = folder.get_sharer_excluded(&state.id).get(i) {
                             let ident = if i < folder_sharer - 1 {
                                 "├─"
                             } else {
