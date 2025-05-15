@@ -79,11 +79,9 @@ fn create_background(app: &App) -> Block {
 }
 
 fn create_popup_block(_: &App, title: String) -> Block {
-    let block = Block::default()
+    Block::default()
         .title_top(Line::from(format!("| {} |", title)).centered())
-        .borders(Borders::ALL);
-
-    block
+        .borders(Borders::ALL)
 }
 
 /// helper function to create a centered rect using up certain percentage of the available rect `r`

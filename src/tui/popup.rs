@@ -21,11 +21,9 @@ pub trait Popup: std::fmt::Debug {
     fn update(&mut self, msg: Message, state: State) -> Option<Message>;
     fn render(&self, frame: &mut Frame, state: State);
     fn create_popup_block(&self, title: String) -> Block {
-        let block = Block::default()
+        Block::default()
             .title_top(Line::from(format!("| {} |", title)).centered())
-            .borders(Borders::ALL);
-
-        block
+            .borders(Borders::ALL)
     }
 }
 
