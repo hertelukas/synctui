@@ -207,17 +207,25 @@ impl State {
                         state.set_error(e.into());
                     }
                 }
-                EventType::DeviceConnected { id, .. } => state.write(|state| {
-                    log::debug!("Device {id} connected");
-                    if let Ok(device) = state.get_device_mut(&id) {
-                        device.connected = true
-                    }
-                }),
-                EventType::DeviceDisconnected { id, .. } => state.write(|state| {
-                    if let Ok(device) = state.get_device_mut(&id) {
-                        device.connected = false
-                    }
-                }),
+                EventType::DeviceConnected { id, .. } => {
+                    state.write(|state| {
+                        log::debug!("Device {id} connected");
+                        if let Ok(device) = state.get_device_mut(&id) {
+                            device.connected = true
+                        }
+                    });
+                    // Not that important of an event
+                    let _ = state.config_tx.send(());
+                }
+                EventType::DeviceDisconnected { id, .. } => {
+                    state.write(|state| {
+                        if let Ok(device) = state.get_device_mut(&id) {
+                            device.connected = false
+                        }
+                    });
+                    // Not that important of an event
+                    let _ = state.config_tx.send(());
+                }
                 EventType::PendingDevicesChanged { .. } => {
                     if let Err(e) = state.reload_tx.send(Reload::PendingDevices).await {
                         log::error!("failed to initiate pending devices reload: {:?}", e);
