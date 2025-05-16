@@ -20,6 +20,7 @@ pub enum Reload {
     Configuration,
     PendingDevices,
     PendingFolders,
+    Connections,
 }
 
 #[derive(Clone, Debug)]
@@ -133,6 +134,7 @@ impl State {
                     match config {
                         Ok(conf) => {
                             state.write(|state| state.update_from_configuration(conf));
+                            state.reload(Reload::Connections);
                         }
                         Err(e) => {
                             log::error!("failed to reload config: {:?}", e);
@@ -164,6 +166,19 @@ impl State {
                     match folders {
                         Ok(folders) => state.write(|state| state.set_pending_folders(folders)),
                         Err(e) => log::warn!("failed to reload pending folders: {:?}", e),
+                    }
+                }
+                Reload::Connections => {
+                    let connections = state.client.get_connections().await;
+                    match connections {
+                        Ok(connections) => state.write(|state| {
+                            for (device_id, connection) in connections.connections {
+                                if let Ok(device) = state.get_device_mut(&device_id) {
+                                    device.connected = connection.connected;
+                                }
+                            }
+                        }),
+                        Err(e) => log::warn!("failed to reload connections: {:?}", e),
                     }
                 }
             }
