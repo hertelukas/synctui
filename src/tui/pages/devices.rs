@@ -37,9 +37,32 @@ impl Widget for &DevicesPage<'_> {
             state
                 .get_other_devices()
                 .iter()
-                .map(|d| d.config.name.clone())
+                .map(|d| (d.config.name.clone(), d.connected))
                 .collect()
         });
+
+        let max = list
+            .iter()
+            .max_by(|x, y| x.0.char_indices().count().cmp(&y.0.char_indices().count()))
+            .map_or(0, |f| f.0.char_indices().count());
+
+        let list: Vec<_> = list
+            .iter()
+            .map(|(name, online)| {
+                let online_span = if *online {
+                    Span::styled("[Online]", Style::default().green().bold())
+                } else {
+                    Span::styled("[Offline]", Style::default().red())
+                };
+
+                let spacing = (max + 2) - name.char_indices().count();
+                Line::from(vec![
+                    Span::raw(name),
+                    Span::raw(" ".repeat(spacing)),
+                    online_span,
+                ])
+            })
+            .collect();
 
         let list = List::new(list).highlight_style(Style::new().bg(Color::DarkGray));
         let mut list_state = ListState::default().with_selected(self.app.selected_device);

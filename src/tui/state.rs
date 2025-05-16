@@ -192,6 +192,17 @@ impl State {
                         state.set_error(e.into());
                     }
                 }
+                EventType::DeviceConnected { id, .. } => state.write(|state| {
+                    log::debug!("Device {id} connected");
+                    if let Ok(device) = state.get_device_mut(&id) {
+                        device.connected = true
+                    }
+                }),
+                EventType::DeviceDisconnected { id, .. } => state.write(|state| {
+                    if let Ok(device) = state.get_device_mut(&id) {
+                        device.connected = false
+                    }
+                }),
                 EventType::PendingDevicesChanged { .. } => {
                     if let Err(e) = state.reload_tx.send(Reload::PendingDevices).await {
                         log::error!("failed to initiate pending devices reload: {:?}", e);
@@ -346,6 +357,14 @@ impl InnerState {
     pub fn get_device(&self, device_id: &str) -> eyre::Result<&Device, AppError> {
         self.devices
             .iter()
+            .find(|d| d.config.device_id == device_id)
+            .ok_or(AppError::UnknownDevice)
+    }
+
+    /// Get a configured device with id `device_id`
+    pub fn get_device_mut(&mut self, device_id: &str) -> eyre::Result<&mut Device, AppError> {
+        self.devices
+            .iter_mut()
             .find(|d| d.config.device_id == device_id)
             .ok_or(AppError::UnknownDevice)
     }
