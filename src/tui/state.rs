@@ -378,6 +378,16 @@ impl State {
         }
     }
 
+    pub fn edit_folder(&self, folder: FolderConfiguration) {
+        let state = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = state.client.post_folder(folder).await {
+                log::error!("failed to update folder on api: {:?}", e);
+                state.set_error(e.into());
+            }
+        });
+    }
+
     pub fn dismiss_folder(&self, folder_id: impl Into<String>, device_id: impl Into<String>) {
         let state = self.clone();
         let folder_id = folder_id.into();

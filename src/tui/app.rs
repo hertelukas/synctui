@@ -346,6 +346,10 @@ impl App {
                 self.popup = None;
                 self.state.dismiss_folder(folder_id, device_id);
             }
+            Message::EditFolder(ref folder) => {
+                self.popup = None;
+                self.state.edit_folder(*folder.clone());
+            }
             _ => {}
         }
 

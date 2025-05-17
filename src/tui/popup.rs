@@ -636,7 +636,7 @@ pub struct FolderPopup {
     id: TextBox,
     label: TextBox,
     path: TextBox,
-    devices: Vec<String>,
+    devices: Vec<FolderDeviceConfiguration>,
     selected_device: Option<usize>,
     focus: FolderFocus,
     general_focus: FolderGeneralFocus,
@@ -696,7 +696,7 @@ impl FolderGeneralFocus {
 
 impl FolderPopup {
     pub fn new(folder: FolderConfiguration, mode: Arc<Mutex<CurrentMode>>) -> Self {
-        let devices = folder.devices.iter().map(|f| f.device_id.clone()).collect();
+        let devices = folder.devices.to_vec();
         Self {
             folder: folder.clone(),
             id: folder.id.into(),
@@ -710,8 +710,19 @@ impl FolderPopup {
         }
     }
 
-    fn submit(&self) -> Option<Message> {
-        todo!()
+    fn submit(&mut self) -> Option<Message> {
+        if self.folder.id != self.id.text {
+            // TODO this is currently unsafe as a potentially different folder
+            // is edited, so don't do anything
+            return None;
+        }
+
+        self.folder.path = self.path.text.clone();
+        self.folder.label = self.label.text.clone();
+
+        self.folder.devices = self.devices.clone();
+
+        Some(Message::EditFolder(Box::new(self.folder.clone())))
     }
 }
 
@@ -794,11 +805,20 @@ impl Popup for FolderPopup {
                                     .get(selected_device)
                                     .map(|device| device.config.device_id.clone())
                             }) {
-                                match self.devices.iter().position(|d| d == &selected_device_id) {
+                                match self
+                                    .devices
+                                    .iter()
+                                    .position(|d| d.device_id == selected_device_id)
+                                {
                                     Some(index) => {
                                         self.devices.remove(index);
                                     }
-                                    None => self.devices.push(selected_device_id),
+                                    // TODO support passwords
+                                    None => self.devices.push(FolderDeviceConfiguration {
+                                        device_id: selected_device_id,
+                                        introduced_by: "".to_string(),
+                                        encryption_password: "".to_string(),
+                                    }),
                                 }
                             }
                         }
@@ -911,12 +931,15 @@ impl Popup for FolderPopup {
                     .get_other_devices()
                     .iter()
                     .map(|device| {
-                        let selected_char =
-                            if self.devices.iter().any(|d| d == &device.config.device_id) {
-                                "✓"
-                            } else {
-                                "☐"
-                            };
+                        let selected_char = if self
+                            .devices
+                            .iter()
+                            .any(|d| d.device_id == device.config.device_id)
+                        {
+                            "✓"
+                        } else {
+                            "☐"
+                        };
                         Span::raw(format!("{} {}", selected_char, device.config.name))
                     })
                     .collect();
