@@ -30,15 +30,38 @@ impl Widget for &FoldersPage<'_> {
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(area);
 
-        let list_items: Vec<_> = self.app.state.read(|state| {
+        let list: Vec<_> = self.app.state.read(|state| {
             state
                 .get_folders()
                 .iter()
-                .map(|f| f.config.label.clone())
+                .map(|f| (f.config.label.clone(), f.completion))
                 .collect()
         });
 
-        let list = List::new(list_items).highlight_style(Style::new().bg(Color::DarkGray));
+        let max = list
+            .iter()
+            .max_by(|x, y| x.0.char_indices().count().cmp(&y.0.char_indices().count()))
+            .map_or(0, |f| f.0.char_indices().count());
+
+        let list: Vec<_> = list
+            .iter()
+            .map(|(label, completion)| {
+                let online_span = if *completion == 100.0 {
+                    Span::styled("[Up to Date]", Style::default().green().bold())
+                } else {
+                    Span::styled(format!("[{}]", completion), Style::default().red())
+                };
+
+                let spacing = (max + 2) - label.char_indices().count();
+                Line::from(vec![
+                    Span::raw(label),
+                    Span::raw(" ".repeat(spacing)),
+                    online_span,
+                ])
+            })
+            .collect();
+
+        let list = List::new(list).highlight_style(Style::new().bg(Color::DarkGray));
 
         let mut list_state = ListState::default().with_selected(self.app.selected_folder);
 

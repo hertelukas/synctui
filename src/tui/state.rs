@@ -14,13 +14,17 @@ use tokio::sync::mpsc;
 
 use crate::AppError;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum Reload {
     ID,
     Configuration,
     PendingDevices,
     PendingFolders,
     Connections,
+    Completion {
+        folder_id: Option<String>,
+        device_id: Option<String>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -102,7 +106,7 @@ impl State {
         let reload_tx = self.reload_tx.clone();
         let state = self.clone();
         tokio::spawn(async move {
-            if let Err(e) = reload_tx.send(reload).await {
+            if let Err(e) = reload_tx.send(reload.clone()).await {
                 log::error!("failed to initiate {:?} reload {:?}", reload, e);
                 state.set_error(e.into());
             }
@@ -133,8 +137,14 @@ impl State {
                     let config = state.client.get_configuration().await;
                     match config {
                         Ok(conf) => {
-                            state.write(|state| state.update_from_configuration(conf));
+                            state.write(|state| state.update_from_configuration(conf.clone()));
                             state.reload(Reload::Connections);
+                            for f in conf.folders {
+                                state.reload(Reload::Completion {
+                                    folder_id: Some(f.id),
+                                    device_id: None,
+                                });
+                            }
                         }
                         Err(e) => {
                             log::error!("failed to reload config: {:?}", e);
@@ -179,6 +189,30 @@ impl State {
                             }
                         }),
                         Err(e) => log::warn!("failed to reload connections: {:?}", e),
+                    }
+                }
+                Reload::Completion {
+                    folder_id,
+                    device_id,
+                } => {
+                    let completion = state
+                        .client
+                        .get_completion(folder_id.as_deref(), device_id.as_deref())
+                        .await;
+                    match completion {
+                        Ok(completion) => {
+                            // Set local completion of folder
+                            if device_id.is_none() {
+                                if let Some(folder_id) = folder_id {
+                                    state.write(|state| {
+                                        if let Ok(folder) = state.get_folder_mut(&folder_id) {
+                                            folder.completion = completion.completion;
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        Err(e) => log::warn!("failed to reload completion: {:?}", e),
                     }
                 }
             }
@@ -489,6 +523,7 @@ impl InnerState {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
     pub config: FolderConfiguration,
+    pub completion: f64,
 }
 
 impl Folder {
@@ -531,6 +566,9 @@ impl From<api::config::DeviceConfiguration> for Device {
 
 impl From<api::config::FolderConfiguration> for Folder {
     fn from(folder: api::config::FolderConfiguration) -> Self {
-        Self { config: folder }
+        Self {
+            config: folder,
+            completion: 100.0,
+        }
     }
 }
