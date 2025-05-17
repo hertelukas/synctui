@@ -12,20 +12,31 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    pub fn load<T>(path: Option<T>) -> eyre::Result<Self>
+    pub fn load<T>(path_arg: Option<T>) -> eyre::Result<Self>
     where
         T: Into<PathBuf>,
     {
-        let path: PathBuf = match path {
-            Some(path) => path.into(),
-            None => dirs::config_dir()
-                .ok_or(AppError::NoConfig)?
-                .join("synctui")
-                .join("config.toml"),
+        let effective_path: PathBuf = match path_arg {
+            Some(p) => p.into(),
+            None => {
+                let base_config_dir =
+                    dirs::config_dir().ok_or(AppError::DefaultConfigDirNotFound)?;
+                base_config_dir.join("synctui").join("config.toml")
+            }
         };
 
-        let config = read_to_string(path)?;
+        let config_content =
+            read_to_string(&effective_path).map_err(|io_error| AppError::ConfigReadError {
+                path: effective_path.clone(),
+                source: io_error,
+            })?;
 
-        Ok(toml::from_str(&config)?)
+        let config_struct: Self =
+            toml::from_str(&config_content).map_err(|toml_error| AppError::ConfigParseError {
+                path: effective_path,
+                source: toml_error,
+            })?;
+
+        Ok(config_struct)
     }
 }
