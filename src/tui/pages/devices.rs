@@ -37,7 +37,7 @@ impl Widget for &DevicesPage<'_> {
             state
                 .get_other_devices()
                 .iter()
-                .map(|d| (d.config.name.clone(), d.connected))
+                .map(|d| (d.config.name.clone(), d.connected.clone()))
                 .collect()
         });
 
@@ -49,10 +49,17 @@ impl Widget for &DevicesPage<'_> {
         let list: Vec<_> = list
             .iter()
             .map(|(name, online)| {
-                let online_span = if *online {
-                    Span::styled("[Online]", Style::default().green().bold())
-                } else {
-                    Span::styled("[Offline]", Style::default().red())
+                let online_span = match online {
+                    crate::tui::state::DeviceStatus::UpToDate => {
+                        Span::styled("[Up to Date]", Style::default().green().bold())
+                    }
+                    crate::tui::state::DeviceStatus::Syncing(completion) => Span::styled(
+                        format!("[Syncing ({:.0}%)]", completion),
+                        Style::default().blue().bold(),
+                    ),
+                    crate::tui::state::DeviceStatus::Disconnected => {
+                        Span::styled("[Disconnected]", Style::default().red())
+                    }
                 };
 
                 let spacing = (max + 2) - name.char_indices().count();

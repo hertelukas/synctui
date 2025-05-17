@@ -181,10 +181,18 @@ impl State {
                 Reload::Connections => {
                     let connections = state.client.get_connections().await;
                     match connections {
-                        Ok(connections) => state.write(|state| {
+                        Ok(connections) => state.write(|inner_state| {
                             for (device_id, connection) in connections.connections {
-                                if let Ok(device) = state.get_device_mut(&device_id) {
-                                    device.connected = connection.connected;
+                                if let Ok(device) = inner_state.get_device_mut(&device_id) {
+                                    if connection.connected {
+                                        device.connected = DeviceStatus::UpToDate;
+                                        state.reload(Reload::Completion {
+                                            folder_id: None,
+                                            device_id: Some(device_id),
+                                        });
+                                    } else {
+                                        device.connected = DeviceStatus::Disconnected;
+                                    }
                                 }
                             }
                         }),
@@ -201,15 +209,29 @@ impl State {
                         .await;
                     match completion {
                         Ok(completion) => {
-                            // Set local completion of folder
-                            if device_id.is_none() {
-                                if let Some(folder_id) = folder_id {
+                            if let Some(device_id) = device_id {
+                                if let Some(_folder_id) = folder_id {
+                                    todo!("update folder completion for device");
+                                } else {
                                     state.write(|state| {
-                                        if let Ok(folder) = state.get_folder_mut(&folder_id) {
-                                            folder.completion = completion.completion;
+                                        if let Ok(device) = state.get_device_mut(&device_id) {
+                                            if completion.completion == 100.0 {
+                                                device.connected = DeviceStatus::UpToDate
+                                            } else {
+                                                device.connected =
+                                                    DeviceStatus::Syncing(completion.completion)
+                                            }
                                         }
-                                    });
+                                    })
                                 }
+                            }
+                            // Set local completion of folder
+                            else if let Some(folder_id) = folder_id {
+                                state.write(|state| {
+                                    if let Ok(folder) = state.get_folder_mut(&folder_id) {
+                                        folder.completion = completion.completion;
+                                    }
+                                });
                             }
                         }
                         Err(e) => log::warn!("failed to reload completion: {:?}", e),
@@ -245,7 +267,7 @@ impl State {
                     state.write(|state| {
                         log::debug!("Device {id} connected");
                         if let Ok(device) = state.get_device_mut(&id) {
-                            device.connected = true
+                            device.connected = DeviceStatus::UpToDate;
                         }
                     });
                     // Not that important of an event
@@ -254,7 +276,7 @@ impl State {
                 EventType::DeviceDisconnected { id, .. } => {
                     state.write(|state| {
                         if let Ok(device) = state.get_device_mut(&id) {
-                            device.connected = false
+                            device.connected = DeviceStatus::Disconnected;
                         }
                     });
                     // Not that important of an event
@@ -270,6 +292,21 @@ impl State {
                     if let Err(e) = state.reload_tx.send(Reload::PendingFolders).await {
                         log::error!("failed to initiate pending devices reload: {:?}", e);
                         state.set_error(e.into());
+                    }
+                }
+                EventType::RemoteDownloadProgress { ref device, .. } => {
+                    if let Err(e) = state
+                        .reload_tx
+                        .send(Reload::Completion {
+                            device_id: Some(device.to_string()),
+                            folder_id: None,
+                        })
+                        .await
+                    {
+                        log::error!(
+                            "failed to initiate completion status based on remote download progress: {:?}",
+                            e
+                        );
                     }
                 }
                 _ => {}
@@ -550,16 +587,23 @@ impl Folder {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum DeviceStatus {
+    UpToDate,
+    Syncing(f64),
+    Disconnected,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct Device {
     pub config: DeviceConfiguration,
-    pub connected: bool,
+    pub connected: DeviceStatus,
 }
 
 impl From<api::config::DeviceConfiguration> for Device {
     fn from(value: api::config::DeviceConfiguration) -> Self {
         Self {
             config: value,
-            connected: false,
+            connected: DeviceStatus::Disconnected,
         }
     }
 }

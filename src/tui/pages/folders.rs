@@ -49,7 +49,7 @@ impl Widget for &FoldersPage<'_> {
                 let online_span = if *completion == 100.0 {
                     Span::styled("[Up to Date]", Style::default().green().bold())
                 } else {
-                    Span::styled(format!("[{}]", completion), Style::default().red())
+                    Span::styled(format!("[{:.0}%]", completion), Style::default().red())
                 };
 
                 let spacing = (max + 2) - label.char_indices().count();
