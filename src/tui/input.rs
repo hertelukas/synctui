@@ -46,6 +46,10 @@ pub enum Message {
         folder_id: String,
         device_id: String,
     },
+    ShareFolder {
+        folder_id: String,
+        device_id: String,
+    },
     DismissFolder {
         folder_id: String,
         device_id: String,

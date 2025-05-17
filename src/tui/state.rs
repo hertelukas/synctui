@@ -6,6 +6,7 @@ use syncthing_rs::Client;
 use syncthing_rs::types as api;
 use syncthing_rs::types::config::DeviceConfiguration;
 use syncthing_rs::types::config::FolderConfiguration;
+use syncthing_rs::types::config::FolderDeviceConfiguration;
 use syncthing_rs::types::config::NewDeviceConfiguration;
 use syncthing_rs::types::config::NewFolderConfiguration;
 use syncthing_rs::types::events::EventType;
@@ -317,10 +318,6 @@ impl State {
     /// Accept device `device_id` in the background. This function is
     /// non-blocking, and will emit a config update once the changes have
     /// been applied.
-    ///
-    /// # Errors
-    ///
-    /// Returns `UnknownDevice` if no such device exists as pending device.
     pub fn accept_device(&self, device_id: &str) {
         match self.read(|state| state.get_pending_device(device_id).cloned()) {
             Ok(device) => {
@@ -353,6 +350,32 @@ impl State {
                 state.reload(Reload::Configuration);
             }
         });
+    }
+
+    pub fn share_folder(&self, folder_id: &str, device_id: &str) {
+        if let Some(folder) = self.write(|state| match state.get_folder_mut(folder_id) {
+            Ok(folder) => {
+                folder.config.devices.push(FolderDeviceConfiguration {
+                    device_id: device_id.to_string(),
+                    introduced_by: String::new(),
+                    encryption_password: String::new(),
+                });
+                Some(folder.config.clone())
+            }
+            Err(e) => {
+                log::error!("fialed to share folder: {:?}", e);
+                self.set_error(e);
+                None
+            }
+        }) {
+            let state = self.clone();
+            tokio::spawn(async move {
+                if let Err(e) = state.client.post_folder(folder).await {
+                    log::error!("failed to share folder on api: {:?}", e);
+                    state.set_error(e.into());
+                }
+            });
+        }
     }
 
     pub fn dismiss_folder(&self, folder_id: impl Into<String>, device_id: impl Into<String>) {

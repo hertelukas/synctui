@@ -537,7 +537,10 @@ impl PendingShareFolderPopup {
 
     fn submit(&self) -> Option<Message> {
         match self.focus {
-            PendingFocus::Accept => todo!(),
+            PendingFocus::Accept => Some(Message::ShareFolder {
+                folder_id: self.folder_id.clone(),
+                device_id: self.device_id.clone(),
+            }),
             PendingFocus::Ignore => todo!(),
             PendingFocus::Dismiss => Some(Message::DismissFolder {
                 folder_id: self.folder_id.clone(),

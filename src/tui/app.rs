@@ -320,6 +320,13 @@ impl App {
                 self.popup = None;
                 self.state.dismiss_device(device_id);
             }
+            Message::ShareFolder {
+                ref folder_id,
+                ref device_id,
+            } => {
+                self.popup = None;
+                self.state.share_folder(folder_id, device_id);
+            }
             Message::DismissFolder {
                 ref folder_id,
                 ref device_id,
