@@ -350,6 +350,10 @@ impl App {
                 self.popup = None;
                 self.state.edit_folder(*folder.clone());
             }
+            Message::RemoveFolder(ref folder_id) => {
+                self.popup = None;
+                self.state.remove_folder(folder_id);
+            }
             _ => {}
         }
 

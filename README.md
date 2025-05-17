@@ -59,9 +59,8 @@ synctui
 - [x] Accept incoming folders
 - [x] Share new folders
 - [x] Show device ID as a QR code
-- [ ] Modify/delete folders
+- [x] Modify/delete folders
 - [ ] Modify/delete devices
-- [ ] Ignore folders
-- [ ] Ignore devices
-- [ ] Live sync status & updates
+- [ ] Ignore folders/devices
+- [ ] Live sync status & updates (WIP)
 

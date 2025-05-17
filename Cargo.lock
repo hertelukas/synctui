@@ -1763,7 +1763,7 @@ dependencies = [
 [[package]]
 name = "syncthing-macros"
 version = "0.1.0-alpha.1"
-source = "git+https://github.com/hertelukas/syncthing-rs.git#f06d659da014f84bc3e62493b83ad649783efe7f"
+source = "git+https://github.com/hertelukas/syncthing-rs.git#1447c9dd225f0bb84fd4ea233f62fed5d94cbfca"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1774,7 +1774,7 @@ dependencies = [
 [[package]]
 name = "syncthing-rs"
 version = "0.1.0-alpha.2"
-source = "git+https://github.com/hertelukas/syncthing-rs.git#f06d659da014f84bc3e62493b83ad649783efe7f"
+source = "git+https://github.com/hertelukas/syncthing-rs.git#1447c9dd225f0bb84fd4ea233f62fed5d94cbfca"
 dependencies = [
  "chrono",
  "log",

@@ -672,6 +672,7 @@ enum FolderGeneralFocus {
     ID,
     Path,
     Submit,
+    Remove,
 }
 
 impl FolderGeneralFocus {
@@ -680,7 +681,8 @@ impl FolderGeneralFocus {
             FolderGeneralFocus::Label => *self = FolderGeneralFocus::ID,
             FolderGeneralFocus::ID => *self = FolderGeneralFocus::Path,
             FolderGeneralFocus::Path => *self = FolderGeneralFocus::Submit,
-            FolderGeneralFocus::Submit => {}
+            FolderGeneralFocus::Submit => *self = FolderGeneralFocus::Remove,
+            FolderGeneralFocus::Remove => {}
         }
     }
 
@@ -690,6 +692,7 @@ impl FolderGeneralFocus {
             FolderGeneralFocus::ID => *self = FolderGeneralFocus::Label,
             FolderGeneralFocus::Path => *self = FolderGeneralFocus::ID,
             FolderGeneralFocus::Submit => *self = FolderGeneralFocus::Path,
+            FolderGeneralFocus::Remove => *self = FolderGeneralFocus::Submit,
         }
     }
 }
@@ -724,6 +727,10 @@ impl FolderPopup {
 
         Some(Message::EditFolder(Box::new(self.folder.clone())))
     }
+
+    fn remove(&self) -> Option<Message> {
+        Some(Message::RemoveFolder(self.folder.id.clone()))
+    }
 }
 
 impl Popup for FolderPopup {
@@ -744,7 +751,7 @@ impl Popup for FolderPopup {
                     FolderGeneralFocus::Label => Some(&mut self.label),
                     FolderGeneralFocus::ID => Some(&mut self.id),
                     FolderGeneralFocus::Path => Some(&mut self.path),
-                    FolderGeneralFocus::Submit => None,
+                    _ => None,
                 };
 
                 match msg {
@@ -770,7 +777,11 @@ impl Popup for FolderPopup {
                             input.move_cursor_right();
                         }
                     }
-                    Message::Select => return self.submit(),
+                    Message::Select => match self.general_focus {
+                        FolderGeneralFocus::Submit => return self.submit(),
+                        FolderGeneralFocus::Remove => return self.remove(),
+                        _ => {}
+                    },
                     _ => {}
                 }
             }
@@ -861,7 +872,7 @@ impl Popup for FolderPopup {
                     Constraint::Length(3),
                     Constraint::Length(1),
                 ]);
-                let [label_area, id_area, path_area, submit_area] =
+                let [label_area, id_area, path_area, buttons_area] =
                     vertical.areas(area.inner(Margin {
                         horizontal: 2,
                         vertical: 2,
@@ -896,16 +907,24 @@ impl Popup for FolderPopup {
                     },
                 );
 
-                let submit = Paragraph::new(Span::styled(
+                let submit = Span::styled(
                     "Submit",
                     match self.general_focus {
                         FolderGeneralFocus::Submit => Style::default().bg(Color::DarkGray),
                         _ => Style::default(),
                     },
-                ));
+                );
+                let remove = Span::styled(
+                    "Remove",
+                    match self.general_focus {
+                        FolderGeneralFocus::Remove => Style::default().bg(Color::DarkGray),
+                        _ => Style::default(),
+                    },
+                );
+
+                let buttons: Line = vec![submit, Span::raw(" "), remove].into();
 
                 // Show cursor
-
                 if *self.mode.lock().unwrap() == CurrentMode::Insert {
                     let (cursor_area, index) = match self.general_focus {
                         FolderGeneralFocus::Label => (label_area, self.label.index),
@@ -913,7 +932,9 @@ impl Popup for FolderPopup {
                         FolderGeneralFocus::Path => (path_area, self.path.index),
                         _ => (area, 0),
                     };
-                    if self.general_focus != FolderGeneralFocus::Submit {
+                    if self.general_focus != FolderGeneralFocus::Submit
+                        && self.general_focus != FolderGeneralFocus::Remove
+                    {
                         frame.set_cursor_position(Position::new(
                             cursor_area.x + index as u16 + 1,
                             cursor_area.y + 1,
@@ -924,7 +945,7 @@ impl Popup for FolderPopup {
                 frame.render_widget(label_paragraph, label_area);
                 frame.render_widget(id_paragraph, id_area);
                 frame.render_widget(path_paragraph, path_area);
-                frame.render_widget(submit, submit_area);
+                frame.render_widget(buttons, buttons_area);
             }
             FolderFocus::Sharing => state.read(|state| {
                 let lines: Vec<_> = state

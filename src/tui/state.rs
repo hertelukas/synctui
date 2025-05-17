@@ -405,6 +405,18 @@ impl State {
         });
     }
 
+    pub fn remove_folder(&self, folder_id: impl Into<String>) {
+        let state = self.clone();
+        let folder_id = folder_id.into();
+
+        tokio::spawn(async move {
+            if let Err(e) = state.client.delete_folder(&folder_id).await {
+                log::error!("failed to delete folder from api: {:?}", e);
+                state.set_error(e.into());
+            }
+        });
+    }
+
     pub fn dismiss_device(&self, device_id: impl Into<String>) {
         let state = self.clone();
         let device_id = device_id.into();

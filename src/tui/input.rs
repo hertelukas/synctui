@@ -56,6 +56,7 @@ pub enum Message {
     },
     // Folder
     EditFolder(Box<FolderConfiguration>),
+    RemoveFolder(String),
     None,
 }
 
