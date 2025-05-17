@@ -141,11 +141,11 @@ impl App {
                     if let Some(added) = added {
                         if let Some(first) = added.first() {
                             if let Err(e) = rerender_tx
-                                .send(Message::NewPendingFolder(
-                                    first.folder_label.clone(),
-                                    first.folder_id.clone(),
-                                    first.device_id.clone(),
-                                ))
+                                .send(Message::NewPendingFolder {
+                                    folder_label: first.folder_label.clone(),
+                                    folder_id: first.folder_id.clone(),
+                                    device_id: first.device_id.clone(),
+                                })
                                 .await
                             {
                                 warn!(
@@ -320,7 +320,10 @@ impl App {
                 self.popup = None;
                 self.state.dismiss_device(device_id);
             }
-            Message::DismissFolder(ref folder_id, ref device_id) => {
+            Message::DismissFolder {
+                ref folder_id,
+                ref device_id,
+            } => {
                 self.popup = None;
                 self.state.dismiss_folder(folder_id, device_id);
             }
@@ -358,7 +361,11 @@ impl App {
             Message::NewPendingDevice(ref device) => {
                 self.popup = Some(Box::new(PendingDevicePopup::new(device.clone())));
             }
-            Message::NewPendingFolder(ref folder_label, ref folder_id, ref device_id) => {
+            Message::NewPendingFolder {
+                ref folder_label,
+                ref folder_id,
+                ref device_id,
+            } => {
                 // Folder already exists on our machine, just share
                 if self.state.read(|state| state.get_folder(folder_id).is_ok()) {
                     self.popup = Some(Box::new(PendingShareFolderPopup::new(

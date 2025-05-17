@@ -539,10 +539,10 @@ impl PendingShareFolderPopup {
         match self.focus {
             PendingFocus::Accept => todo!(),
             PendingFocus::Ignore => todo!(),
-            PendingFocus::Dismiss => Some(Message::DismissFolder(
-                self.folder_id.clone(),
-                self.device_id.clone(),
-            )),
+            PendingFocus::Dismiss => Some(Message::DismissFolder {
+                folder_id: self.folder_id.clone(),
+                device_id: self.device_id.clone(),
+            }),
         }
     }
 }

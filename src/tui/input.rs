@@ -41,9 +41,15 @@ pub enum Message {
     IgnoreDevice(String),
     DismissDevice(String),
     // PendingFolder
-    /// folder_label, folder_id, device_id
-    NewPendingFolder(String, String, String),
-    DismissFolder(String, String),
+    NewPendingFolder {
+        folder_label: String,
+        folder_id: String,
+        device_id: String,
+    },
+    DismissFolder {
+        folder_id: String,
+        device_id: String,
+    },
     None,
 }
 
