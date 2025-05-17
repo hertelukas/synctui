@@ -6,11 +6,14 @@ use std::{
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Position, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, Borders, Clear, Paragraph, Widget},
+    widgets::{Block, Borders, Clear, List, ListState, Paragraph, StatefulWidget, Widget},
 };
-use syncthing_rs::types::config::{FolderDeviceConfiguration, NewFolderConfiguration};
+use strum::IntoEnumIterator;
+use syncthing_rs::types::config::{
+    FolderConfiguration, FolderDeviceConfiguration, NewFolderConfiguration,
+};
 
 use super::{app::CurrentMode, input::Message};
 
@@ -22,7 +25,7 @@ pub trait Popup: std::fmt::Debug {
     fn render(&self, frame: &mut Frame, state: State);
     fn create_popup_block(&self, title: String) -> Block {
         Block::default()
-            .title_top(Line::from(format!("| {} |", title)).centered())
+            .title_top(Line::from(format!("| {} |", title)).centered().bold())
             .borders(Borders::ALL)
     }
 }
@@ -111,6 +114,12 @@ impl TextBox {
 
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
         new_cursor_pos.clamp(0, self.text.chars().count())
+    }
+
+    fn as_paragraph<'a>(&'a self, title: &'a str, style: Style) -> Paragraph<'a> {
+        Paragraph::new(self.text.as_str())
+            .style(style)
+            .block(Block::bordered().title(title))
     }
 }
 
@@ -617,5 +626,313 @@ impl Popup for PendingShareFolderPopup {
         frame.render_widget(block, area);
         frame.render_widget(line, message_area);
         frame.render_widget(buttons_line, buttons_area);
+    }
+}
+
+/// Popup representing a folder
+#[derive(Debug)]
+pub struct FolderPopup {
+    folder: FolderConfiguration,
+    id: TextBox,
+    label: TextBox,
+    path: TextBox,
+    devices: Vec<String>,
+    selected_device: Option<usize>,
+    focus: FolderFocus,
+    general_focus: FolderGeneralFocus,
+    mode: Arc<Mutex<CurrentMode>>,
+}
+
+#[derive(Debug, Default, strum::EnumIter, PartialEq, Eq)]
+enum FolderFocus {
+    #[default]
+    General,
+    Sharing,
+}
+
+impl TryFrom<u32> for FolderFocus {
+    type Error = ();
+
+    fn try_from(v: u32) -> Result<Self, Self::Error> {
+        if let Some((_, screen)) = FolderFocus::iter()
+            .enumerate()
+            .find(|(i, _)| i + 1 == (v as usize))
+        {
+            Ok(screen)
+        } else {
+            Err(())
+        }
+    }
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+enum FolderGeneralFocus {
+    #[default]
+    Label,
+    ID,
+    Path,
+    Submit,
+}
+
+impl FolderGeneralFocus {
+    fn next(&mut self) {
+        match self {
+            FolderGeneralFocus::Label => *self = FolderGeneralFocus::ID,
+            FolderGeneralFocus::ID => *self = FolderGeneralFocus::Path,
+            FolderGeneralFocus::Path => *self = FolderGeneralFocus::Submit,
+            FolderGeneralFocus::Submit => {}
+        }
+    }
+
+    fn prev(&mut self) {
+        match self {
+            FolderGeneralFocus::Label => {}
+            FolderGeneralFocus::ID => *self = FolderGeneralFocus::Label,
+            FolderGeneralFocus::Path => *self = FolderGeneralFocus::ID,
+            FolderGeneralFocus::Submit => *self = FolderGeneralFocus::Path,
+        }
+    }
+}
+
+impl FolderPopup {
+    pub fn new(folder: FolderConfiguration, mode: Arc<Mutex<CurrentMode>>) -> Self {
+        let devices = folder.devices.iter().map(|f| f.device_id.clone()).collect();
+        Self {
+            folder: folder.clone(),
+            id: folder.id.into(),
+            label: folder.label.into(),
+            path: folder.path.into(),
+            devices,
+            selected_device: None,
+            focus: FolderFocus::default(),
+            general_focus: FolderGeneralFocus::default(),
+            mode,
+        }
+    }
+
+    fn submit(&self) -> Option<Message> {
+        todo!()
+    }
+}
+
+impl Popup for FolderPopup {
+    fn update(&mut self, msg: Message, state: State) -> Option<Message> {
+        match msg {
+            Message::Quit => return Some(Message::Quit),
+            Message::Number(i) => {
+                if let Ok(focus) = FolderFocus::try_from(i) {
+                    self.focus = focus;
+                }
+            }
+            _ => {}
+        }
+
+        match self.focus {
+            FolderFocus::General => {
+                let input = match self.general_focus {
+                    FolderGeneralFocus::Label => Some(&mut self.label),
+                    FolderGeneralFocus::ID => Some(&mut self.id),
+                    FolderGeneralFocus::Path => Some(&mut self.path),
+                    FolderGeneralFocus::Submit => None,
+                };
+
+                match msg {
+                    Message::FocusNext | Message::Down => self.general_focus.next(),
+                    Message::FocusBack | Message::Up => self.general_focus.prev(),
+                    Message::Character(c) => {
+                        if let Some(input) = input {
+                            input.enter_char(c);
+                        }
+                    }
+                    Message::Backspace => {
+                        if let Some(input) = input {
+                            input.delete_char();
+                        }
+                    }
+                    Message::Left => {
+                        if let Some(input) = input {
+                            input.move_cursor_left();
+                        }
+                    }
+                    Message::Right => {
+                        if let Some(input) = input {
+                            input.move_cursor_right();
+                        }
+                    }
+                    Message::Select => return self.submit(),
+                    _ => {}
+                }
+            }
+            FolderFocus::Sharing => {
+                let len = state.read(|state| state.get_other_devices().len());
+                match msg {
+                    Message::FocusNext | Message::Down => {
+                        if len == 0 {
+                            return None;
+                        }
+                        if let Some(selected_device) = self.selected_device {
+                            self.selected_device = Some((selected_device + 1) % len);
+                        } else {
+                            self.selected_device = Some(0)
+                        }
+                    }
+                    Message::FocusBack | Message::Up => {
+                        if len == 0 {
+                            return None;
+                        }
+                        if let Some(selected_device) = self.selected_device {
+                            self.selected_device = Some((selected_device + len - 1) % len);
+                        } else {
+                            self.selected_device = Some(len - 1)
+                        }
+                    }
+                    Message::Select => {
+                        if let Some(selected_device) = self.selected_device {
+                            if let Some(selected_device_id) = state.read(|state| {
+                                state
+                                    .get_other_devices()
+                                    .get(selected_device)
+                                    .map(|device| device.config.device_id.clone())
+                            }) {
+                                match self.devices.iter().position(|d| d == &selected_device_id) {
+                                    Some(index) => {
+                                        self.devices.remove(index);
+                                    }
+                                    None => self.devices.push(selected_device_id),
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        None
+    }
+
+    fn render(&self, frame: &mut Frame, state: State) {
+        let block = self.create_popup_block(format!("Edit Folder ({})", self.folder.label));
+
+        let mut bottom_string = FolderFocus::iter()
+            .enumerate()
+            .map(|(i, focus)| {
+                Span::styled(
+                    format!("| ({}) {:?} ", i + 1, focus),
+                    if focus == self.focus {
+                        Style::default().bold()
+                    } else {
+                        Style::default()
+                    },
+                )
+            })
+            .collect::<Vec<Span>>();
+        bottom_string.push("|".into());
+        let block = block.title_bottom(bottom_string);
+
+        let area = centered_rect(75, 75, frame.area());
+        Clear.render(area, frame.buffer_mut());
+
+        match self.focus {
+            FolderFocus::General => {
+                let vertical = Layout::vertical([
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                    Constraint::Length(1),
+                ]);
+                let [label_area, id_area, path_area, submit_area] =
+                    vertical.areas(area.inner(Margin {
+                        horizontal: 2,
+                        vertical: 2,
+                    }));
+
+                let focused_style = Style::default().fg(Color::Blue);
+
+                let label_paragraph = self.label.as_paragraph(
+                    "Label",
+                    if self.general_focus == FolderGeneralFocus::Label {
+                        focused_style
+                    } else {
+                        Style::default()
+                    },
+                );
+
+                let id_paragraph = self.id.as_paragraph(
+                    "ID",
+                    if self.general_focus == FolderGeneralFocus::ID {
+                        focused_style
+                    } else {
+                        Style::default()
+                    },
+                );
+
+                let path_paragraph = self.path.as_paragraph(
+                    "Path",
+                    if self.general_focus == FolderGeneralFocus::Path {
+                        focused_style
+                    } else {
+                        Style::default()
+                    },
+                );
+
+                let submit = Paragraph::new(Span::styled(
+                    "Submit",
+                    match self.general_focus {
+                        FolderGeneralFocus::Submit => Style::default().bg(Color::DarkGray),
+                        _ => Style::default(),
+                    },
+                ));
+
+                // Show cursor
+
+                if *self.mode.lock().unwrap() == CurrentMode::Insert {
+                    let (cursor_area, index) = match self.general_focus {
+                        FolderGeneralFocus::Label => (label_area, self.label.index),
+                        FolderGeneralFocus::ID => (id_area, self.id.index),
+                        FolderGeneralFocus::Path => (path_area, self.path.index),
+                        _ => (area, 0),
+                    };
+                    if self.general_focus != FolderGeneralFocus::Submit {
+                        frame.set_cursor_position(Position::new(
+                            cursor_area.x + index as u16 + 1,
+                            cursor_area.y + 1,
+                        ));
+                    }
+                }
+
+                frame.render_widget(label_paragraph, label_area);
+                frame.render_widget(id_paragraph, id_area);
+                frame.render_widget(path_paragraph, path_area);
+                frame.render_widget(submit, submit_area);
+            }
+            FolderFocus::Sharing => state.read(|state| {
+                let lines: Vec<_> = state
+                    .get_other_devices()
+                    .iter()
+                    .map(|device| {
+                        let selected_char =
+                            if self.devices.iter().any(|d| d == &device.config.device_id) {
+                                "✓"
+                            } else {
+                                "☐"
+                            };
+                        Span::raw(format!("{} {}", selected_char, device.config.name))
+                    })
+                    .collect();
+
+                let list = List::new(lines).highlight_style(Style::new().bg(Color::DarkGray));
+                let mut list_state = ListState::default().with_selected(self.selected_device);
+
+                let area = area.inner(Margin {
+                    horizontal: 2,
+                    vertical: 2,
+                });
+
+                StatefulWidget::render(list, area, frame.buffer_mut(), &mut list_state);
+            }),
+        }
+
+        frame.render_widget(block, area);
     }
 }

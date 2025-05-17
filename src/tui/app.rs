@@ -16,7 +16,7 @@ use crate::{AppError, tui::state::State};
 use super::{
     input::Message,
     pages::PendingPageState,
-    popup::{NewFolderPopup, PendingDevicePopup, PendingShareFolderPopup, Popup},
+    popup::{FolderPopup, NewFolderPopup, PendingDevicePopup, PendingShareFolderPopup, Popup},
     state::Reload,
 };
 
@@ -205,6 +205,18 @@ impl App {
                     self.mode.clone(),
                     self.state.clone(),
                 )));
+            }
+            Message::Select => {
+                if let Some(highlighted_folder) = self.selected_folder {
+                    self.state.read(|state| {
+                        if let Some(folder) = state.get_folders().get(highlighted_folder) {
+                            self.popup = Some(Box::new(FolderPopup::new(
+                                folder.config.clone(),
+                                self.mode.clone(),
+                            )))
+                        }
+                    })
+                }
             }
             _ => {}
         };
