@@ -13,6 +13,8 @@
 
 ---
 
+![synctui demo](media/synctui.GIF)
+
 **Synctui** lets you control [Syncthing](https://syncthing.net) from your terminal — no need to open a browser. Perfect for headless setups like servers or Raspberry Pis. Skip the port forwarding and get syncing.
 
 It already supports most essential features, so you can manage devices and folders pretty comfortably. That said, don’t uninstall the Syncthing GUI just yet — advanced features are still on the roadmap.
