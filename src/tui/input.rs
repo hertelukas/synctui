@@ -5,7 +5,9 @@ use ratatui::crossterm::{
     self,
     event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind},
 };
-use syncthing_rs::types::config::{FolderConfiguration, NewFolderConfiguration};
+use syncthing_rs::types::config::{
+    DeviceConfiguration, FolderConfiguration, NewFolderConfiguration,
+};
 
 use super::app::CurrentMode;
 
@@ -57,6 +59,9 @@ pub enum Message {
     // Folder
     EditFolder(Box<FolderConfiguration>),
     RemoveFolder(String),
+    // Device
+    EditDevice(Box<DeviceConfiguration>),
+    RemoveDevice(String),
     None,
 }
 
