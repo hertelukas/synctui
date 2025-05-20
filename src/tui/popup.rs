@@ -770,11 +770,15 @@ impl Popup for FolderPopup {
                     Message::Left => {
                         if let Some(input) = input {
                             input.move_cursor_left();
+                        } else if matches!(self.general_focus, FolderGeneralFocus::Remove) {
+                            self.general_focus.prev();
                         }
                     }
                     Message::Right => {
                         if let Some(input) = input {
                             input.move_cursor_right();
+                        } else if matches!(self.general_focus, FolderGeneralFocus::Submit) {
+                            self.general_focus.next();
                         }
                     }
                     Message::Select => match self.general_focus {
