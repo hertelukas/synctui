@@ -62,7 +62,7 @@ synctui
 - [x] Create and share new folders
 - [x] Show device ID as a QR code
 - [x] Modify/delete folders
-- [ ] Modify/delete devices
+- [x] Modify/delete devices
 - [ ] Ignore folders/devices
 - [ ] Live sync status & updates (WIP)
 - [ ] Support for encrypted endpoints

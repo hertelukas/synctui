@@ -1033,7 +1033,7 @@ impl DevicePopup {
     fn submit(&mut self) -> Option<Message> {
         self.device.name = self.name.text.clone();
 
-        todo!()
+        Some(Message::EditDevice(Box::new(self.device.clone())))
     }
 
     fn remove(&self) -> Option<Message> {

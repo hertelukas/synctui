@@ -369,6 +369,14 @@ impl App {
                 self.popup = None;
                 self.state.remove_folder(folder_id);
             }
+            Message::EditDevice(ref device) => {
+                self.popup = None;
+                self.state.edit_device(*device.clone());
+            }
+            Message::RemoveDevice(ref device_id) => {
+                self.popup = None;
+                self.state.remove_device(device_id);
+            }
             _ => {}
         }
 
