@@ -428,6 +428,28 @@ impl State {
             // We don't need to update the config, the event should handle that
         });
     }
+
+    pub fn edit_device(&self, device: DeviceConfiguration) {
+        let state = self.clone();
+        tokio::spawn(async move {
+            if let Err(e) = state.client.post_device(device).await {
+                log::error!("failed to update device on api: {:?}", e);
+                state.set_error(e.into());
+            }
+        });
+    }
+
+    pub fn remove_device(&self, device_id: impl Into<String>) {
+        let state = self.clone();
+        let device_id = device_id.into();
+
+        tokio::spawn(async move {
+            if let Err(e) = state.client.delete_device(&device_id).await {
+                log::error!("failed to delete device from api: {:?}", e);
+                state.set_error(e.into());
+            }
+        });
+    }
 }
 
 #[derive(Debug, Default)]

@@ -12,7 +12,7 @@ use ratatui::{
 };
 use strum::IntoEnumIterator;
 use syncthing_rs::types::config::{
-    FolderConfiguration, FolderDeviceConfiguration, NewFolderConfiguration,
+    DeviceConfiguration, FolderConfiguration, FolderDeviceConfiguration, NewFolderConfiguration,
 };
 
 use super::{app::CurrentMode, input::Message};
@@ -977,6 +977,166 @@ impl Popup for FolderPopup {
             }),
         }
 
+        frame.render_widget(block, area);
+    }
+}
+
+/// Popup representing a device
+#[derive(Debug)]
+pub struct DevicePopup {
+    device: DeviceConfiguration,
+    id: TextBox,
+    name: TextBox,
+    focus: DeviceFocus,
+    mode: Arc<Mutex<CurrentMode>>,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+enum DeviceFocus {
+    #[default]
+    Name,
+    Submit,
+    Remove,
+}
+
+impl DeviceFocus {
+    fn next(&mut self) {
+        match self {
+            DeviceFocus::Name => *self = DeviceFocus::Submit,
+            DeviceFocus::Submit => *self = DeviceFocus::Remove,
+            DeviceFocus::Remove => {}
+        }
+    }
+
+    fn prev(&mut self) {
+        match self {
+            DeviceFocus::Name => {}
+            DeviceFocus::Submit => *self = DeviceFocus::Name,
+            DeviceFocus::Remove => *self = DeviceFocus::Submit,
+        }
+    }
+}
+
+impl DevicePopup {
+    pub fn new(device: DeviceConfiguration, mode: Arc<Mutex<CurrentMode>>) -> Self {
+        let id = device.device_id.clone().into();
+        let name = device.name.clone().into();
+        Self {
+            device,
+            id,
+            name,
+            focus: DeviceFocus::default(),
+            mode,
+        }
+    }
+
+    fn submit(&mut self) -> Option<Message> {
+        self.device.name = self.name.text.clone();
+
+        Some(Message::EditDevice(Box::new(self.device.clone())))
+    }
+
+    fn remove(&self) -> Option<Message> {
+        Some(Message::RemoveDevice(self.device.device_id.clone()))
+    }
+}
+
+impl Popup for DevicePopup {
+    fn update(&mut self, msg: Message, _state: State) -> Option<Message> {
+        match msg {
+            Message::Quit => return Some(Message::Quit),
+            Message::FocusNext | Message::Down => self.focus.next(),
+            Message::FocusBack | Message::Up => self.focus.prev(),
+            Message::Left => match self.focus {
+                DeviceFocus::Name => self.name.move_cursor_left(),
+                DeviceFocus::Submit => {}
+                DeviceFocus::Remove => self.focus.prev(),
+            },
+            Message::Right => match self.focus {
+                DeviceFocus::Name => self.name.move_cursor_right(),
+                DeviceFocus::Submit => self.focus.next(),
+                DeviceFocus::Remove => {}
+            },
+            Message::Character(c) => {
+                if matches!(self.focus, DeviceFocus::Name) {
+                    self.name.enter_char(c);
+                }
+            }
+            Message::Backspace => {
+                if matches!(self.focus, DeviceFocus::Name) {
+                    self.name.delete_char();
+                }
+            }
+            Message::Select => match self.focus {
+                DeviceFocus::Name => {}
+                DeviceFocus::Submit => return self.submit(),
+                DeviceFocus::Remove => return self.remove(),
+            },
+            _ => {}
+        }
+
+        None
+    }
+
+    fn render(&self, frame: &mut Frame, _state: State) {
+        let block = self.create_popup_block(format!("Edit Device ({})", self.device.name));
+
+        let area = centered_rect(50, 50, frame.area());
+        Clear.render(area, frame.buffer_mut());
+
+        let vertical = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(1),
+        ]);
+        let [id_area, name_area, buttons_area] = vertical.areas(area.inner(Margin {
+            horizontal: 2,
+            vertical: 2,
+        }));
+
+        let focused_style = Style::default().fg(Color::Blue);
+
+        let id_paragraph = self.id.as_paragraph("ID", Style::default());
+
+        let name_paragraph = self.name.as_paragraph(
+            "Name",
+            if self.focus == DeviceFocus::Name {
+                focused_style
+            } else {
+                Style::default()
+            },
+        );
+
+        let submit = Span::styled(
+            "Submit",
+            match self.focus {
+                DeviceFocus::Submit => Style::default().bg(Color::DarkGray),
+                _ => Style::default(),
+            },
+        );
+        let remove = Span::styled(
+            "Remove",
+            match self.focus {
+                DeviceFocus::Remove => Style::default().bg(Color::DarkGray),
+                _ => Style::default(),
+            },
+        );
+
+        let buttons: Line = vec![submit, Span::raw(" "), remove].into();
+
+        // Show cursor
+        if *self.mode.lock().unwrap() == CurrentMode::Insert
+            && matches!(self.focus, DeviceFocus::Name)
+        {
+            frame.set_cursor_position(Position::new(
+                name_area.x + (self.name.index as u16) + 1,
+                name_area.y + 1,
+            ));
+        }
+
+        frame.render_widget(id_paragraph, id_area);
+        frame.render_widget(name_paragraph, name_area);
+        frame.render_widget(buttons, buttons_area);
         frame.render_widget(block, area);
     }
 }

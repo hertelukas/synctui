@@ -16,7 +16,10 @@ use crate::{AppError, tui::state::State};
 use super::{
     input::Message,
     pages::PendingPageState,
-    popup::{FolderPopup, NewFolderPopup, PendingDevicePopup, PendingShareFolderPopup, Popup},
+    popup::{
+        DevicePopup, FolderPopup, NewFolderPopup, PendingDevicePopup, PendingShareFolderPopup,
+        Popup,
+    },
     state::Reload,
 };
 
@@ -247,6 +250,18 @@ impl App {
                     self.selected_device = Some(len - 1);
                 }
             }
+            Message::Select => {
+                if let Some(highlighted_device) = self.selected_device {
+                    self.state.read(|state| {
+                        if let Some(device) = state.get_other_devices().get(highlighted_device) {
+                            self.popup = Some(Box::new(DevicePopup::new(
+                                device.config.clone(),
+                                self.mode.clone(),
+                            )))
+                        }
+                    })
+                }
+            }
             _ => {}
         };
         None
@@ -353,6 +368,14 @@ impl App {
             Message::RemoveFolder(ref folder_id) => {
                 self.popup = None;
                 self.state.remove_folder(folder_id);
+            }
+            Message::EditDevice(ref device) => {
+                self.popup = None;
+                self.state.edit_device(*device.clone());
+            }
+            Message::RemoveDevice(ref device_id) => {
+                self.popup = None;
+                self.state.remove_device(device_id);
             }
             _ => {}
         }
