@@ -64,7 +64,7 @@ impl Widget for &FoldersPage<'_> {
                         Span::styled("[Preparing Sync]", Style::default().blue().bold())
                     }
                     StateChangedState::Syncing => Span::styled(
-                        format!("[Syncing ({:.0}%)]", completion),
+                        format!("[Syncing ({completion:.0}%)]"),
                         Style::default().blue().bold(),
                     ),
                     StateChangedState::Cleaning => {
@@ -127,8 +127,8 @@ impl Widget for &FoldersPage<'_> {
                         Span::raw(" "),
                         Span::styled("Shared with", Style::default().bold()),
                         Span::raw(" : "),
-                        Span::styled(format!("{}", folder_sharer), Style::default().bold()),
-                        Span::raw(format!(" Device{}", s_suffix)),
+                        Span::styled(format!("{folder_sharer}"), Style::default().bold()),
+                        Span::raw(format!(" Device{s_suffix}")),
                     ])));
 
                     for i in 0..folder_sharer {

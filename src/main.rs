@@ -123,7 +123,7 @@ async fn main() -> eyre::Result<()> {
 
         task::spawn(async move {
             while let Ok(event) = rx_event.recv().await {
-                println!("{:#?}", event);
+                println!("{event:#?}");
             }
         })
         .await?;

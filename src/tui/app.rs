@@ -113,7 +113,7 @@ impl App {
         rerender_tx: mpsc::Sender<Message>,
     ) {
         while let Ok(event) = event_rx.recv().await {
-            debug!("Received event: {:?}", event);
+            debug!("Received event: {event:?}");
             match event.ty {
                 EventType::PendingDevicesChanged {
                     ref added,
@@ -126,8 +126,7 @@ impl App {
                                 .await
                             {
                                 warn!(
-                                    "failed to send rerender message with new popup about new pending device: {:?}",
-                                    e
+                                    "failed to send rerender message with new popup about new pending device: {e:?}"
                                 );
                                 // Don't set an error, as this is not really mission critical
                             }
@@ -152,8 +151,7 @@ impl App {
                                 .await
                             {
                                 warn!(
-                                    "failed to send rerender message with new popup about new pending folder-share: {:?}",
-                                    e
+                                    "failed to send rerender message with new popup about new pending folder-share: {e:?}",
                                 );
                             }
                         }

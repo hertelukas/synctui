@@ -54,7 +54,7 @@ impl Widget for &DevicesPage<'_> {
                         Span::styled("[Up to Date]", Style::default().green().bold())
                     }
                     crate::tui::state::DeviceStatus::Syncing(completion) => Span::styled(
-                        format!("[Syncing ({:.0}%)]", completion),
+                        format!("[Syncing ({completion:.0}%)]"),
                         Style::default().blue().bold(),
                     ),
                     crate::tui::state::DeviceStatus::Disconnected => {
@@ -103,8 +103,8 @@ impl Widget for &DevicesPage<'_> {
                         Span::raw(" "),
                         Span::styled("Sharing", Style::default().bold()),
                         Span::raw(" : "),
-                        Span::styled(format!("{}", device_folders), Style::default().bold()),
-                        Span::raw(format!(" Folder{}", s_suffix)),
+                        Span::styled(format!("{device_folders}"), Style::default().bold()),
+                        Span::raw(format!(" Folder{s_suffix}")),
                     ])));
 
                     for i in 0..device_folders {

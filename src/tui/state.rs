@@ -58,7 +58,7 @@ impl State {
         let state_handle = state.clone();
         tokio::spawn(async move {
             if let Err(e) = client_clone.get_events(event_tx_clone, true).await {
-                log::error!("failed to get events: {:?}", e);
+                log::error!("failed to get events: {e:?}");
                 state_handle.set_error(e.into());
             };
         });
@@ -109,7 +109,7 @@ impl State {
         let state = self.clone();
         tokio::spawn(async move {
             if let Err(e) = reload_tx.send(reload.clone()).await {
-                log::error!("failed to initiate {:?} reload {:?}", reload, e);
+                log::error!("failed to initiate {reload:?} reload {e:?}");
                 state.set_error(e.into());
             }
         });
@@ -149,7 +149,7 @@ impl State {
                             }
                         }
                         Err(e) => {
-                            log::error!("failed to reload config: {:?}", e);
+                            log::error!("failed to reload config: {e:?}");
                             state.set_error(e.into());
                         }
                     }
@@ -161,7 +161,7 @@ impl State {
                             state.write(|state| state.id = id);
                         }
                         Err(e) => {
-                            log::error!("failed to load Syncthing ID: {:?}", e);
+                            log::error!("failed to load Syncthing ID: {e:?}");
                             state.set_error(e.into());
                         }
                     }
@@ -170,14 +170,14 @@ impl State {
                     let devices = state.client.get_pending_devices().await;
                     match devices {
                         Ok(devices) => state.write(|state| state.set_pending_devices(devices)),
-                        Err(e) => log::warn!("failed to reload pending devices: {:?}", e),
+                        Err(e) => log::warn!("failed to reload pending devices: {e:?}"),
                     }
                 }
                 Reload::PendingFolders => {
                     let folders = state.client.get_pending_folders().await;
                     match folders {
                         Ok(folders) => state.write(|state| state.set_pending_folders(folders)),
-                        Err(e) => log::warn!("failed to reload pending folders: {:?}", e),
+                        Err(e) => log::warn!("failed to reload pending folders: {e:?}"),
                     }
                 }
                 Reload::Connections => {
@@ -198,7 +198,7 @@ impl State {
                                 }
                             }
                         }),
-                        Err(e) => log::warn!("failed to reload connections: {:?}", e),
+                        Err(e) => log::warn!("failed to reload connections: {e:?}"),
                     }
                 }
                 Reload::Completion {
@@ -236,15 +236,14 @@ impl State {
                                 });
                             }
                         }
-                        Err(e) => log::warn!("failed to reload completion: {:?}", e),
+                        Err(e) => log::warn!("failed to reload completion: {e:?}"),
                     }
                 }
             }
             // For every case, if we reach this point, the config has changed
             if let Err(e) = state.config_tx.send(()) {
                 log::warn!(
-                    "could not initiate a config update after a reload has been completed: {:?}",
-                    e
+                    "could not initiate a config update after a reload has been completed: {e:?}"
                 );
             }
         }
@@ -254,13 +253,12 @@ impl State {
     /// in the background.
     async fn handle_event(mut event_rx: broadcast::Receiver<api::events::Event>, state: State) {
         while let Ok(event) = event_rx.recv().await {
-            log::debug!("state is handling event {:?}", event);
+            log::debug!("state is handling event {event:?}");
             match event.ty {
                 EventType::ConfigSaved { .. } => {
                     if let Err(e) = state.reload_tx.send(Reload::Configuration).await {
                         log::error!(
-                            "failed to initiate configuration reload due to new saved config: {:?}",
-                            e
+                            "failed to initiate configuration reload due to new saved config: {e:?}"
                         );
                         state.set_error(e.into());
                     }
@@ -286,13 +284,13 @@ impl State {
                 }
                 EventType::PendingDevicesChanged { .. } => {
                     if let Err(e) = state.reload_tx.send(Reload::PendingDevices).await {
-                        log::error!("failed to initiate pending devices reload: {:?}", e);
+                        log::error!("failed to initiate pending devices reload: {e:?}");
                         state.set_error(e.into());
                     }
                 }
                 EventType::PendingFoldersChanged { .. } => {
                     if let Err(e) = state.reload_tx.send(Reload::PendingFolders).await {
-                        log::error!("failed to initiate pending devices reload: {:?}", e);
+                        log::error!("failed to initiate pending devices reload: {e:?}");
                         state.set_error(e.into());
                     }
                 }
@@ -306,8 +304,7 @@ impl State {
                         .await
                     {
                         log::error!(
-                            "failed to initiate completion status based on remote download progress: {:?}",
-                            e
+                            "failed to initiate completion status based on remote download progress: {e:?}"
                         );
                     }
                 }
@@ -316,7 +313,7 @@ impl State {
                 } => {
                     state.write(|state| {
                         log::debug!("folder {folder} changed state to {to:?}");
-                        if let Ok(folder) = state.get_folder_mut(&folder) {
+                        if let Ok(folder) = state.get_folder_mut(folder) {
                             folder.state = to.clone();
                         }
                     });
@@ -337,7 +334,7 @@ impl State {
                 let state = self.clone();
                 tokio::spawn(async move {
                     if let Err(e) = state.client.add_device(device).await {
-                        log::error!("failed to add device to api: {:?}", e);
+                        log::error!("failed to add device to api: {e:?}");
                         state.set_error(e.into());
                     } else {
                         state.reload(Reload::Configuration);
@@ -345,7 +342,7 @@ impl State {
                 });
             }
             Err(e) => {
-                log::error!("failed to accept device: {:?}", e);
+                log::error!("failed to accept device: {e:?}");
                 self.set_error(e);
             }
         }
@@ -356,7 +353,7 @@ impl State {
         let state = self.clone();
         tokio::spawn(async move {
             if let Err(e) = state.client.add_folder(folder).await {
-                log::error!("failed to add folder to api: {:?}", e);
+                log::error!("failed to add folder to api: {e:?}");
                 state.set_error(e.into());
             } else {
                 // TODO We don't need to update the config, the event should handle that
@@ -376,7 +373,7 @@ impl State {
                 Some(folder.config.clone())
             }
             Err(e) => {
-                log::error!("fialed to share folder: {:?}", e);
+                log::error!("fialed to share folder: {e:?}");
                 self.set_error(e);
                 None
             }
@@ -384,7 +381,7 @@ impl State {
             let state = self.clone();
             tokio::spawn(async move {
                 if let Err(e) = state.client.post_folder(folder).await {
-                    log::error!("failed to share folder on api: {:?}", e);
+                    log::error!("failed to share folder on api: {e:?}");
                     state.set_error(e.into());
                 }
             });
@@ -395,7 +392,7 @@ impl State {
         let state = self.clone();
         tokio::spawn(async move {
             if let Err(e) = state.client.post_folder(folder).await {
-                log::error!("failed to update folder on api: {:?}", e);
+                log::error!("failed to update folder on api: {e:?}");
                 state.set_error(e.into());
             }
         });
@@ -411,7 +408,7 @@ impl State {
                 .dismiss_pending_folder(&folder_id, Some(&device_id))
                 .await
             {
-                log::error!("failed to dismiss folder to api: {:?}", e);
+                log::error!("failed to dismiss folder to api: {e:?}");
                 state.set_error(e.into());
             }
             // We don't need to update the config, the event should handle that
@@ -424,7 +421,7 @@ impl State {
 
         tokio::spawn(async move {
             if let Err(e) = state.client.delete_folder(&folder_id).await {
-                log::error!("failed to delete folder from api: {:?}", e);
+                log::error!("failed to delete folder from api: {e:?}");
                 state.set_error(e.into());
             }
         });
@@ -435,7 +432,7 @@ impl State {
         let device_id = device_id.into();
         tokio::spawn(async move {
             if let Err(e) = state.client.dismiss_pending_device(&device_id).await {
-                log::error!("failed to dismiss device to api: {:?}", e);
+                log::error!("failed to dismiss device to api: {e:?}");
                 state.set_error(e.into());
             }
             // We don't need to update the config, the event should handle that
@@ -446,7 +443,7 @@ impl State {
         let state = self.clone();
         tokio::spawn(async move {
             if let Err(e) = state.client.post_device(device).await {
-                log::error!("failed to update device on api: {:?}", e);
+                log::error!("failed to update device on api: {e:?}");
                 state.set_error(e.into());
             }
         });
@@ -458,7 +455,7 @@ impl State {
 
         tokio::spawn(async move {
             if let Err(e) = state.client.delete_device(&device_id).await {
-                log::error!("failed to delete device from api: {:?}", e);
+                log::error!("failed to delete device from api: {e:?}");
                 state.set_error(e.into());
             }
         });

@@ -80,7 +80,7 @@ fn create_background(app: &App) -> Block {
 
 fn create_popup_block(_: &App, title: String) -> Block {
     Block::default()
-        .title_top(Line::from(format!("| {} |", title)).centered())
+        .title_top(Line::from(format!("| {title} |")).centered())
         .borders(Borders::ALL)
 }
 
