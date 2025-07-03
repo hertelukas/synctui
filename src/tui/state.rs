@@ -10,6 +10,7 @@ use syncthing_rs::types::config::FolderDeviceConfiguration;
 use syncthing_rs::types::config::NewDeviceConfiguration;
 use syncthing_rs::types::config::NewFolderConfiguration;
 use syncthing_rs::types::events::EventType;
+use syncthing_rs::types::events::StateChangedState;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 
@@ -266,7 +267,7 @@ impl State {
                 }
                 EventType::DeviceConnected { id, .. } => {
                     state.write(|state| {
-                        log::debug!("Device {id} connected");
+                        log::debug!("device {id} connected");
                         if let Ok(device) = state.get_device_mut(&id) {
                             device.connected = DeviceStatus::UpToDate;
                         }
@@ -309,6 +310,18 @@ impl State {
                             e
                         );
                     }
+                }
+                EventType::StateChanged {
+                    ref folder, ref to, ..
+                } => {
+                    state.write(|state| {
+                        log::debug!("folder {folder} changed state to {to:?}");
+                        if let Ok(folder) = state.get_folder_mut(&folder) {
+                            folder.state = to.clone();
+                        }
+                    });
+                    let _ = state.config_tx.send(());
+                    // TODO if state is syncing, recalculate completion progress
                 }
                 _ => {}
             }
@@ -628,6 +641,7 @@ impl InnerState {
 pub struct Folder {
     pub config: FolderConfiguration,
     pub completion: f64,
+    pub state: StateChangedState,
 }
 
 impl Folder {
@@ -680,6 +694,7 @@ impl From<api::config::FolderConfiguration> for Folder {
         Self {
             config: folder,
             completion: 100.0,
+            state: StateChangedState::Idle,
         }
     }
 }

@@ -4,6 +4,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, StatefulWidget, Widget},
 };
+use syncthing_rs::types::events::StateChangedState;
 
 use crate::tui::app::App;
 
@@ -34,7 +35,7 @@ impl Widget for &FoldersPage<'_> {
             state
                 .get_folders()
                 .iter()
-                .map(|f| (f.config.label.clone(), f.completion))
+                .map(|f| (f.config.label.clone(), f.completion, f.state.clone()))
                 .collect()
         });
 
@@ -45,18 +46,46 @@ impl Widget for &FoldersPage<'_> {
 
         let list: Vec<_> = list
             .iter()
-            .map(|(label, completion)| {
-                let online_span = if *completion == 100.0 {
-                    Span::styled("[Up to Date]", Style::default().green().bold())
-                } else {
-                    Span::styled(format!("[{:.0}%]", completion), Style::default().red())
+            .map(|(label, completion, state)| {
+                let state_span = match state {
+                    StateChangedState::Idle => {
+                        Span::styled("[Up to Date]", Style::default().green().bold())
+                    }
+                    StateChangedState::Scanning => {
+                        Span::styled("[Scanning]", Style::default().blue().bold())
+                    }
+                    StateChangedState::ScanWaiting => {
+                        Span::styled("[Awaiting Scan]", Style::default().blue().bold())
+                    }
+                    StateChangedState::SyncWaiting => {
+                        Span::styled("[Awaiting Sync]", Style::default().blue().bold())
+                    }
+                    StateChangedState::SyncPreparing => {
+                        Span::styled("[Preparing Sync]", Style::default().blue().bold())
+                    }
+                    StateChangedState::Syncing => Span::styled(
+                        format!("[Syncing ({:.0}%)]", completion),
+                        Style::default().blue().bold(),
+                    ),
+                    StateChangedState::Cleaning => {
+                        Span::styled("[Cleaning]", Style::default().blue().bold())
+                    }
+                    StateChangedState::CleanWaiting => {
+                        Span::styled("[Awaiting Clean]", Style::default().blue().bold())
+                    }
+                    StateChangedState::Error => {
+                        Span::styled("[Error]", Style::default().red().bold())
+                    }
+                    StateChangedState::Unknown => {
+                        Span::styled("[Unknown]", Style::default().yellow().bold())
+                    }
                 };
 
                 let spacing = (max + 2) - label.char_indices().count();
                 Line::from(vec![
                     Span::raw(label),
                     Span::raw(" ".repeat(spacing)),
-                    online_span,
+                    state_span,
                 ])
             })
             .collect();
