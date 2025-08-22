@@ -53,7 +53,7 @@ pub fn ui(frame: &mut Frame, app: &App) {
     }
 }
 
-fn create_background(app: &App) -> Block {
+fn create_background(app: &App) -> Block<'_> {
     let block = Block::default()
         .title_top(Line::from("| SyncTUI |").centered().bold())
         .borders(Borders::ALL);
@@ -78,7 +78,7 @@ fn create_background(app: &App) -> Block {
     )
 }
 
-fn create_popup_block(_: &App, title: String) -> Block {
+fn create_popup_block(_: &App, title: String) -> Block<'_> {
     Block::default()
         .title_top(Line::from(format!("| {title} |")).centered())
         .borders(Borders::ALL)

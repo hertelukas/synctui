@@ -65,15 +65,15 @@ fn default_log_file_path() -> Option<PathBuf> {
 }
 
 fn setup_logging(path: PathBuf, level: log::LevelFilter) -> eyre::Result<()> {
-    if let Some(parent_dir) = path.parent() {
-        if !parent_dir.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent_dir).wrap_err_with(|| {
-                format!(
-                    "Failed to create parent directory '{}' while preparing log file",
-                    parent_dir.display()
-                )
-            })?;
-        }
+    if let Some(parent_dir) = path.parent()
+        && !parent_dir.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent_dir).wrap_err_with(|| {
+            format!(
+                "Failed to create parent directory '{}' while preparing log file",
+                parent_dir.display()
+            )
+        })?;
     }
 
     let target_file = std::fs::File::create(&path)

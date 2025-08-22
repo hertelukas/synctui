@@ -23,7 +23,7 @@ pub trait Popup: std::fmt::Debug {
     /// Updates the state of the popup. If Some(Quit) is returned, the popup gets destroyed
     fn update(&mut self, msg: Message, state: State) -> Option<Message>;
     fn render(&self, frame: &mut Frame, state: State);
-    fn create_popup_block(&self, title: String) -> Block {
+    fn create_popup_block(&self, title: String) -> Block<'_> {
         Block::default()
             .title_top(Line::from(format!("| {title} |")).centered().bold())
             .borders(Borders::ALL)
@@ -279,10 +279,10 @@ impl Popup for NewFolderPopup {
             Message::FocusNext | Message::Down => self.select_next(),
             Message::FocusBack | Message::Up => self.select_prev(),
             Message::Left => {
-                if let NewFolderFocus::Device(i) = self.focus {
-                    if i > 0 {
-                        self.select_prev();
-                    }
+                if let NewFolderFocus::Device(i) = self.focus
+                    && i > 0
+                {
+                    self.select_prev();
                 }
             }
             Message::Right => {
@@ -813,28 +813,28 @@ impl Popup for FolderPopup {
                         }
                     }
                     Message::Select => {
-                        if let Some(selected_device) = self.selected_device {
-                            if let Some(selected_device_id) = state.read(|state| {
+                        if let Some(selected_device) = self.selected_device
+                            && let Some(selected_device_id) = state.read(|state| {
                                 state
                                     .get_other_devices()
                                     .get(selected_device)
                                     .map(|device| device.config.device_id.clone())
-                            }) {
-                                match self
-                                    .devices
-                                    .iter()
-                                    .position(|d| d.device_id == selected_device_id)
-                                {
-                                    Some(index) => {
-                                        self.devices.remove(index);
-                                    }
-                                    // TODO support passwords
-                                    None => self.devices.push(FolderDeviceConfiguration {
-                                        device_id: selected_device_id,
-                                        introduced_by: "".to_string(),
-                                        encryption_password: "".to_string(),
-                                    }),
+                            })
+                        {
+                            match self
+                                .devices
+                                .iter()
+                                .position(|d| d.device_id == selected_device_id)
+                            {
+                                Some(index) => {
+                                    self.devices.remove(index);
                                 }
+                                // TODO support passwords
+                                None => self.devices.push(FolderDeviceConfiguration {
+                                    device_id: selected_device_id,
+                                    introduced_by: "".to_string(),
+                                    encryption_password: "".to_string(),
+                                }),
                             }
                         }
                     }

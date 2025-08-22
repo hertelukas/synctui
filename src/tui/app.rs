@@ -119,18 +119,16 @@ impl App {
                     ref added,
                     ref removed,
                 } => {
-                    if let Some(added) = added {
-                        if let Some(first) = added.first() {
-                            if let Err(e) = rerender_tx
-                                .send(Message::NewPendingDevice(first.device_id.clone()))
-                                .await
-                            {
-                                warn!(
-                                    "failed to send rerender message with new popup about new pending device: {e:?}"
-                                );
-                                // Don't set an error, as this is not really mission critical
-                            }
-                        }
+                    if let Some(added) = added
+                        && let Some(first) = added.first()
+                        && let Err(e) = rerender_tx
+                            .send(Message::NewPendingDevice(first.device_id.clone()))
+                            .await
+                    {
+                        warn!(
+                            "failed to send rerender message with new popup about new pending device: {e:?}"
+                        );
+                        // Don't set an error, as this is not really mission critical
                     }
                     if let Some(_removed) = removed {
                         // TODO close popup if we have one with a removed device opened
@@ -140,21 +138,19 @@ impl App {
                     ref added,
                     ref removed,
                 } => {
-                    if let Some(added) = added {
-                        if let Some(first) = added.first() {
-                            if let Err(e) = rerender_tx
-                                .send(Message::NewPendingFolder {
-                                    folder_label: first.folder_label.clone(),
-                                    folder_id: first.folder_id.clone(),
-                                    device_id: first.device_id.clone(),
-                                })
-                                .await
-                            {
-                                warn!(
-                                    "failed to send rerender message with new popup about new pending folder-share: {e:?}",
-                                );
-                            }
-                        }
+                    if let Some(added) = added
+                        && let Some(first) = added.first()
+                        && let Err(e) = rerender_tx
+                            .send(Message::NewPendingFolder {
+                                folder_label: first.folder_label.clone(),
+                                folder_id: first.folder_id.clone(),
+                                device_id: first.device_id.clone(),
+                            })
+                            .await
+                    {
+                        warn!(
+                            "failed to send rerender message with new popup about new pending folder-share: {e:?}",
+                        );
                     }
                     if let Some(_removed) = removed {
                         // TODO close popup if we have one with a removed folder opened
