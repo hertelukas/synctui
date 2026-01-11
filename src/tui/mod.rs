@@ -8,13 +8,13 @@ use ui::ui;
 use app::{App, CurrentMode};
 use color_eyre::eyre;
 use ratatui::{
-    Terminal,
+    DefaultTerminal, Terminal,
     crossterm::{
         event::{DisableMouseCapture, EnableMouseCapture},
         execute,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
-    prelude::{Backend, CrosstermBackend},
+    prelude::CrosstermBackend,
 };
 
 mod app;
@@ -65,7 +65,7 @@ fn init_panic_hook() {
     }));
 }
 
-fn init_tui() -> io::Result<Terminal<impl Backend>> {
+fn init_tui() -> io::Result<DefaultTerminal> {
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
     Terminal::new(CrosstermBackend::new(io::stdout()))
@@ -77,8 +77,8 @@ fn restore_tui() -> io::Result<()> {
     Ok(())
 }
 
-async fn run<B: Backend>(
-    terminal: &mut Terminal<B>,
+async fn run(
+    terminal: &mut DefaultTerminal,
     app: &mut App,
     mut reload_rx: Receiver<Message>,
 ) -> Result<(), std::io::Error> {
